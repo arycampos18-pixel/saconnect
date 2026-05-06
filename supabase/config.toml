@@ -1,0 +1,19 @@
+project_id = "ktwdgnkurtalclsgxfov"
+
+[functions.webhook-zapi]
+verify_jwt = false
+
+[functions.aniversariantes-disparo]
+verify_jwt = false
+
+[functions.webhook-zapi-receptivo]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
+[functions.tickets-google-oauth-callback]
+verify_jwt = false
+
+[functions.whatsapp-meta-webhook]
+verify_jwt = false

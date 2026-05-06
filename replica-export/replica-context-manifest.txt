@@ -1,0 +1,94 @@
+=== REPLICA CONTEXT MANIFEST ===
+Gerado: 2026-05-04T14:49:09.2120031-04:00
+Repo root: C:\Sistema\Samuel\SA Connect_ Smart Political Relations (1)
+
+=== package.json ===
+name: vite_react_shadcn_ts
+dependencies (chave): @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, @hookform/resolvers, @radix-ui/react-accordion, @radix-ui/react-alert-dialog, @radix-ui/react-aspect-ratio, @radix-ui/react-avatar, @radix-ui/react-checkbox, @radix-ui/react-collapsible, @radix-ui/react-context-menu, @radix-ui/react-dialog, @radix-ui/react-dropdown-menu, @radix-ui/react-hover-card, @radix-ui/react-label, @radix-ui/react-menubar, @radix-ui/react-navigation-menu, @radix-ui/react-popover, @radix-ui/react-progress, @radix-ui/react-radio-group, @radix-ui/react-scroll-area, @radix-ui/react-select, @radix-ui/react-separator, @radix-ui/react-slider, @radix-ui/react-slot, @radix-ui/react-switch, @radix-ui/react-tabs, @radix-ui/react-toast, @radix-ui/react-toggle, @radix-ui/react-toggle-group, @radix-ui/react-tooltip, @supabase/supabase-js, @tanstack/query-core, @tanstack/react-query, @types/leaflet, class-variance-authority, clsx, cmdk, date-fns, embla-carousel-react, input-otp, leaflet, lucide-react, next-themes, qrcode.react, react, react-day-picker, react-dom, react-hook-form, react-leaflet, react-resizable-panels, react-router-dom, reactflow, recharts, sonner, tailwind-merge, tailwindcss-animate, vaul, zod
+devDependencies (chave): @eslint/js, @tailwindcss/typography, @testing-library/jest-dom, @testing-library/react, @types/node, @types/react, @types/react-dom, @vitejs/plugin-react-swc, autoprefixer, eslint, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, jsdom, lovable-tagger, postcss, tailwindcss, typescript, typescript-eslint, vite, vitest
+
+=== Contagens ===
+Migrations SQL: 49
+Edge function folders: 23
+Ficheiros src *.ts/*.tsx: 314
+
+=== MigraÃ§Ãµes (ordenar por nome) ===
+20260502034308_fa04d779-2704-4284-aae7-630127560077.sql
+20260502034322_28dcd41f-8016-4d1d-9f51-ae53ba56f7d9.sql
+20260502062530_223f822d-9648-435b-be6e-5af319321382.sql
+20260502063125_d8ba4cef-deef-4698-a3c9-6c5af9735c21.sql
+20260502064045_5a834bce-6f55-4b17-9c91-f266d9bcb5a3.sql
+20260502065435_a4ef80ce-d260-44c6-8d0a-d31683695c9d.sql
+20260502070217_3c1e367b-8df5-4025-9bfa-e66241ee661e.sql
+20260502071023_8d310eac-a296-47d8-bc64-6a17fb0d456b.sql
+20260502071205_e413bffa-55ac-4c16-bf05-4f55a2af675a.sql
+20260502072038_057c0f8d-8db5-43a5-bd75-a422a55125bf.sql
+20260502074445_061d6a71-664d-4048-816c-5325c4ab9b8c.sql
+20260502075749_f963fe75-55eb-498f-97cc-39ad0cd84dbe.sql
+20260502080201_6d698a16-d967-45da-a158-1ff7c2cda8da.sql
+20260502080606_f3120409-4d9f-4039-8cca-fee7388a37ce.sql
+20260502081000_431ac677-65ed-4da0-985d-d65579a907cd.sql
+20260502081555_88152846-b232-4573-8e70-2f7e2b637385.sql
+20260502081904_9556f901-fe36-407f-80dc-6c1576d15e61.sql
+20260502082224_76809c5f-9cbd-4639-9e02-2d0a62aafd1f.sql
+20260502082552_2fc37a7c-42cc-4f03-9310-1f05478a1a94.sql
+20260502090643_8ca7dfae-86e2-4c66-b951-4b85bc96abf6.sql
+20260502100143_8ecd1576-57fc-49c8-8f74-e093ebbd8192.sql
+20260502101318_80a16392-cdb1-48fb-84fd-4dc70d7abd59.sql
+20260502181151_3411e66b-a8dc-4e1c-b3fb-c0f43d896de0.sql
+20260502181838_1da65db2-84ee-4a14-b5c6-d06c931d6c37.sql
+20260502182206_2bc3d999-5053-4226-85f0-dfcd9014e08e.sql
+20260502183946_0f3caa79-55db-4095-9f4a-26e29fa09194.sql
+20260502200256_91b764d5-92c7-42ed-80be-0df8b6b3061d.sql
+20260502200329_11e91a17-d96a-4e4a-94d1-2eaa2728a1ca.sql
+20260502201637_7356b5e0-65de-436f-8568-a0d248189324.sql
+20260502202215_23cdbd98-5fb1-45e1-bc20-b619d9fdfd5c.sql
+20260502202939_e10591ed-5afc-4154-abcc-d234baded759.sql
+20260502204031_23e3a248-b95b-4508-a67c-849a85e5b223.sql
+20260502204550_e41e905f-ce15-48e0-acd9-ea24d6f7bf86.sql
+20260502205421_6ca63f54-41fe-4772-bea7-aa54877e185c.sql
+20260502211140_de7f526d-8933-4026-aec7-9927759b7201.sql
+20260502211648_9f7d03df-2d43-4cf0-a9f7-c47dc58d6ff7.sql
+20260502212648_6df3635b-5b1a-492c-bada-7b42406f986f.sql
+20260502214013_7c78d157-ba90-456c-a065-1499f3f69e00.sql
+20260503004006_38eb302f-6ab4-4864-8a31-8c74b705b414.sql
+20260503142848_ef170ce2-dd2f-4f63-8c69-1af47eb46a36.sql
+20260503143351_3bec4234-6448-4fa6-aae5-b25ecef57a54.sql
+20260504005750_7af70121-d523-40cf-abfb-7c2d7802adc8.sql
+20260504010821_1a4ad1a4-21d3-4df1-b80b-7bdfaec4f316.sql
+20260504012021_4796bd39-9220-43db-beb3-ca9c6eeaecdd.sql
+20260504013243_a7e6e9e1-9b98-4efb-afce-0ecb641172cc.sql
+20260504014320_cf2a2d63-1871-4bb8-9d5d-cc139a0bb1f2.sql
+20260504015126_241a3a4f-90e0-41e7-b185-232a41202bbe.sql
+20260504021753_a375c720-88f3-4fc7-9cf8-d76f59986f37.sql
+20260504021933_c88493c1-25d0-4ff6-8a92-901d7666780e.sql
+
+=== Edge functions ===
+analise-concorrencia
+analise-preditiva
+aniversariantes-disparo
+automacao-executar
+backup-export
+disparo-processar
+enviar-em-massa
+meta-oauth-callback
+meta-send-message
+meta-sync-templates
+notificacoes-disparo
+send-whatsapp
+send-whatsapp-zapi
+tickets-google-oauth-callback
+tickets-google-oauth-start
+tickets-google-sync
+webhook-dispatcher
+webhook-zapi
+webhook-zapi-receptivo
+whatsapp-manutencao
+whatsapp-meta-webhook
+whatsapp-webhook
+zapi-status
+
+=== PrÃ³ximo passo ===
+1) Anexar este ficheiro + scripts/PROMPT_REPLICA_ZERO.md a outra IA.
+2) Opcional: zipar o repo sem node_modules e anexar.
+3) Ver tambÃ©m: C:\Sistema\Samuel\SA Connect_ Smart Political Relations (1)\replica-export\repo-tree.txt
