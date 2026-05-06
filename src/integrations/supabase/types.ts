@@ -352,40 +352,61 @@ export type Database = {
       cabos_eleitorais: {
         Row: {
           ativo: boolean
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
           company_id: string | null
+          complemento: string | null
           created_at: string
           created_by: string | null
           id: string
           lideranca_id: string
           meta: number
           nome: string
+          numero: string | null
+          rua: string | null
           telefone: string | null
+          uf: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           lideranca_id: string
           meta?: number
           nome: string
+          numero?: string | null
+          rua?: string | null
           telefone?: string | null
+          uf?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           lideranca_id?: string
           meta?: number
           nome?: string
+          numero?: string | null
+          rua?: string | null
           telefone?: string | null
+          uf?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -773,6 +794,7 @@ export type Database = {
       }
       crm_oportunidades: {
         Row: {
+          ativo: boolean
           company_id: string | null
           created_at: string
           created_by: string | null
@@ -787,6 +809,7 @@ export type Database = {
           valor_estimado: number
         }
         Insert: {
+          ativo?: boolean
           company_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -801,6 +824,7 @@ export type Database = {
           valor_estimado?: number
         }
         Update: {
+          ativo?: boolean
           company_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -885,24 +909,45 @@ export type Database = {
       }
       departamento_membros: {
         Row: {
+          bairro: string | null
+          cep: string | null
+          cidade: string | null
           company_id: string | null
+          complemento: string | null
           created_at: string
           departamento_id: string
           id: string
+          numero: string | null
+          rua: string | null
+          uf: string | null
           user_id: string
         }
         Insert: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           departamento_id: string
           id?: string
+          numero?: string | null
+          rua?: string | null
+          uf?: string | null
           user_id: string
         }
         Update: {
+          bairro?: string | null
+          cep?: string | null
+          cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           departamento_id?: string
           id?: string
+          numero?: string | null
+          rua?: string | null
+          uf?: string | null
           user_id?: string
         }
         Relationships: [
@@ -965,6 +1010,142 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "settings_companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      department_qrcode_submissions: {
+        Row: {
+          bairro: string | null
+          cidade: string | null
+          company_id: string
+          cpf: string | null
+          created_at: string
+          data_nascimento: string | null
+          departamentos_selecionados: Json
+          email: string | null
+          endereco: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          qrcode_id: string
+          raw_data: Json | null
+          telefone: string
+          uf: string | null
+          welcome_error: string | null
+          welcome_sent_at: string | null
+          welcome_status: string | null
+        }
+        Insert: {
+          bairro?: string | null
+          cidade?: string | null
+          company_id: string
+          cpf?: string | null
+          created_at?: string
+          data_nascimento?: string | null
+          departamentos_selecionados?: Json
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          qrcode_id: string
+          raw_data?: Json | null
+          telefone: string
+          uf?: string | null
+          welcome_error?: string | null
+          welcome_sent_at?: string | null
+          welcome_status?: string | null
+        }
+        Update: {
+          bairro?: string | null
+          cidade?: string | null
+          company_id?: string
+          cpf?: string | null
+          created_at?: string
+          data_nascimento?: string | null
+          departamentos_selecionados?: Json
+          email?: string | null
+          endereco?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          qrcode_id?: string
+          raw_data?: Json | null
+          telefone?: string
+          uf?: string | null
+          welcome_error?: string | null
+          welcome_sent_at?: string | null
+          welcome_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_qrcode_submissions_qrcode_id_fkey"
+            columns: ["qrcode_id"]
+            isOneToOne: false
+            referencedRelation: "department_qrcodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      department_qrcodes: {
+        Row: {
+          ativo: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          departamentos: Json
+          expires_at: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          token: string
+          total_cadastros: number
+          updated_at: string
+          whatsapp_auto_enabled: boolean
+          whatsapp_session_id: string | null
+          whatsapp_welcome_message: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          departamentos?: Json
+          expires_at?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          token?: string
+          total_cadastros?: number
+          updated_at?: string
+          whatsapp_auto_enabled?: boolean
+          whatsapp_session_id?: string | null
+          whatsapp_welcome_message?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          departamentos?: Json
+          expires_at?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          token?: string
+          total_cadastros?: number
+          updated_at?: string
+          whatsapp_auto_enabled?: boolean
+          whatsapp_session_id?: string | null
+          whatsapp_welcome_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_qrcodes_whatsapp_session_id_fkey"
+            columns: ["whatsapp_session_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -1253,6 +1434,7 @@ export type Database = {
       }
       eleitores: {
         Row: {
+          ativo: boolean
           bairro: string | null
           cabo_id: string | null
           cep: string | null
@@ -1278,6 +1460,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ativo?: boolean
           bairro?: string | null
           cabo_id?: string | null
           cep?: string | null
@@ -1303,6 +1486,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ativo?: boolean
           bairro?: string | null
           cabo_id?: string | null
           cep?: string | null
@@ -1353,31 +1537,55 @@ export type Database = {
       }
       evento_inscricoes: {
         Row: {
+          cargo: string | null
           checkin_em: string | null
           company_id: string | null
+          cpf: string | null
           created_at: string
-          eleitor_id: string
+          eleitor_id: string | null
+          email: string | null
           evento_id: string
           id: string
+          nome: string | null
+          observacoes: string | null
+          origem: string
           presente: boolean
+          status: string
+          telefone: string | null
         }
         Insert: {
+          cargo?: string | null
           checkin_em?: string | null
           company_id?: string | null
+          cpf?: string | null
           created_at?: string
-          eleitor_id: string
+          eleitor_id?: string | null
+          email?: string | null
           evento_id: string
           id?: string
+          nome?: string | null
+          observacoes?: string | null
+          origem?: string
           presente?: boolean
+          status?: string
+          telefone?: string | null
         }
         Update: {
+          cargo?: string | null
           checkin_em?: string | null
           company_id?: string | null
+          cpf?: string | null
           created_at?: string
-          eleitor_id?: string
+          eleitor_id?: string | null
+          email?: string | null
           evento_id?: string
           id?: string
+          nome?: string | null
+          observacoes?: string | null
+          origem?: string
           presente?: boolean
+          status?: string
+          telefone?: string | null
         }
         Relationships: [
           {
@@ -1405,7 +1613,13 @@ export type Database = {
       }
       eventos: {
         Row: {
+          ativo: boolean
+          bairro: string | null
+          cep: string | null
+          checkin_token: string | null
+          cidade: string | null
           company_id: string | null
+          complemento: string | null
           created_at: string
           created_by: string | null
           data_hora: string
@@ -1414,13 +1628,22 @@ export type Database = {
           limite_inscritos: number | null
           local: string
           nome: string
+          numero: string | null
           responsavel_id: string | null
+          rua: string | null
           status: Database["public"]["Enums"]["evento_status"]
           tipo: Database["public"]["Enums"]["evento_tipo"]
+          uf: string | null
           updated_at: string
         }
         Insert: {
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          checkin_token?: string | null
+          cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           data_hora: string
@@ -1429,13 +1652,22 @@ export type Database = {
           limite_inscritos?: number | null
           local: string
           nome: string
+          numero?: string | null
           responsavel_id?: string | null
+          rua?: string | null
           status?: Database["public"]["Enums"]["evento_status"]
           tipo: Database["public"]["Enums"]["evento_tipo"]
+          uf?: string | null
           updated_at?: string
         }
         Update: {
+          ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          checkin_token?: string | null
+          cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           data_hora?: string
@@ -1444,9 +1676,12 @@ export type Database = {
           limite_inscritos?: number | null
           local?: string
           nome?: string
+          numero?: string | null
           responsavel_id?: string | null
+          rua?: string | null
           status?: Database["public"]["Enums"]["evento_status"]
           tipo?: Database["public"]["Enums"]["evento_tipo"]
+          uf?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1722,46 +1957,64 @@ export type Database = {
       liderancas: {
         Row: {
           ativo: boolean
+          bairro: string | null
+          cep: string | null
           cidade: string | null
           company_id: string | null
+          complemento: string | null
           created_at: string
           created_by: string | null
           id: string
           meta: number
           nome: string
+          numero: string | null
           organizacao_id: string | null
+          rua: string | null
           superior_id: string | null
           telefone: string | null
+          uf: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
           cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           meta?: number
           nome: string
+          numero?: string | null
           organizacao_id?: string | null
+          rua?: string | null
           superior_id?: string | null
           telefone?: string | null
+          uf?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
           cidade?: string | null
           company_id?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           meta?: number
           nome?: string
+          numero?: string | null
           organizacao_id?: string | null
+          rua?: string | null
           superior_id?: string | null
           telefone?: string | null
+          uf?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -2003,39 +2256,54 @@ export type Database = {
       organizacoes: {
         Row: {
           ativo: boolean
+          bairro: string | null
+          cep: string | null
           cidade: string | null
+          complemento: string | null
           created_at: string
           created_by: string | null
           id: string
           nome: string
+          numero: string | null
           observacoes: string | null
           responsavel_id: string | null
+          rua: string | null
           tipo: string
           uf: string | null
           updated_at: string
         }
         Insert: {
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
           cidade?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           nome: string
+          numero?: string | null
           observacoes?: string | null
           responsavel_id?: string | null
+          rua?: string | null
           tipo?: string
           uf?: string | null
           updated_at?: string
         }
         Update: {
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
           cidade?: string | null
+          complemento?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           nome?: string
+          numero?: string | null
           observacoes?: string | null
           responsavel_id?: string | null
+          rua?: string | null
           tipo?: string
           uf?: string | null
           updated_at?: string
@@ -2278,36 +2546,57 @@ export type Database = {
         Row: {
           ativo: boolean
           avatar_url: string | null
+          bairro: string | null
           cargo: string | null
+          cep: string | null
+          cidade: string | null
+          complemento: string | null
           created_at: string
           email: string
           id: string
           nome: string
+          numero: string | null
+          rua: string | null
           telefone: string | null
+          uf: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           ativo?: boolean
           avatar_url?: string | null
+          bairro?: string | null
           cargo?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
           created_at?: string
           email: string
           id?: string
           nome: string
+          numero?: string | null
+          rua?: string | null
           telefone?: string | null
+          uf?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           ativo?: boolean
           avatar_url?: string | null
+          bairro?: string | null
           cargo?: string | null
+          cep?: string | null
+          cidade?: string | null
+          complemento?: string | null
           created_at?: string
           email?: string
           id?: string
           nome?: string
+          numero?: string | null
+          rua?: string | null
           telefone?: string | null
+          uf?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -2775,6 +3064,7 @@ export type Database = {
       }
       tags: {
         Row: {
+          ativo: boolean
           company_id: string | null
           cor: string
           created_at: string
@@ -2782,6 +3072,7 @@ export type Database = {
           nome: string
         }
         Insert: {
+          ativo?: boolean
           company_id?: string | null
           cor?: string
           created_at?: string
@@ -2789,6 +3080,7 @@ export type Database = {
           nome: string
         }
         Update: {
+          ativo?: boolean
           company_id?: string | null
           cor?: string
           created_at?: string
@@ -3063,56 +3355,77 @@ export type Database = {
       tickets: {
         Row: {
           assigned_to: string | null
+          bairro: string | null
           category_id: string | null
+          cep: string | null
+          cidade: string | null
           company_id: string
+          complemento: string | null
           created_at: string
           description: string | null
           id: string
+          numero: string | null
           priority: string
           queue_id: string | null
           requester_email: string | null
           requester_name: string | null
           requester_phone: string | null
+          rua: string | null
           sla_due_at: string | null
           status: string
           ticket_number: number
           title: string
+          uf: string | null
           updated_at: string
         }
         Insert: {
           assigned_to?: string | null
+          bairro?: string | null
           category_id?: string | null
+          cep?: string | null
+          cidade?: string | null
           company_id: string
+          complemento?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          numero?: string | null
           priority?: string
           queue_id?: string | null
           requester_email?: string | null
           requester_name?: string | null
           requester_phone?: string | null
+          rua?: string | null
           sla_due_at?: string | null
           status?: string
           ticket_number?: number
           title: string
+          uf?: string | null
           updated_at?: string
         }
         Update: {
           assigned_to?: string | null
+          bairro?: string | null
           category_id?: string | null
+          cep?: string | null
+          cidade?: string | null
           company_id?: string
+          complemento?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          numero?: string | null
           priority?: string
           queue_id?: string | null
           requester_email?: string | null
           requester_name?: string | null
           requester_phone?: string | null
+          rua?: string | null
           sla_due_at?: string | null
           status?: string
           ticket_number?: number
           title?: string
+          uf?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -4542,7 +4855,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      criar_perfil_em_todas_empresas: {
+        Args: { _descricao?: string; _nome: string }
+        Returns: undefined
+      }
       cron_disparos_tick: { Args: never; Returns: undefined }
+      definir_permissoes_perfil_global: {
+        Args: { _nome: string; _permission_ids: string[] }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -4558,6 +4879,52 @@ export type Database = {
       pesquisa_ja_respondeu: {
         Args: { _pesquisa_id: string; _telefone: string }
         Returns: boolean
+      }
+      public_get_department_qrcode: {
+        Args: { _token: string }
+        Returns: {
+          ativo: boolean
+          departamentos: Json
+          expires_at: string
+          id: string
+          nome: string
+        }[]
+      }
+      public_submit_department_qrcode: {
+        Args: {
+          _bairro?: string
+          _cidade?: string
+          _cpf?: string
+          _data_nascimento?: string
+          _departamentos_selecionados: Json
+          _email?: string
+          _endereco?: string
+          _nome: string
+          _observacoes?: string
+          _telefone: string
+          _token: string
+          _uf?: string
+        }
+        Returns: string
+      }
+      public_submit_eleitor: {
+        Args: {
+          _bairro?: string
+          _cep?: string
+          _cidade?: string
+          _complemento?: string
+          _nome: string
+          _numero?: string
+          _rua?: string
+          _telefone: string
+          _uf?: string
+        }
+        Returns: string
+      }
+      remover_perfil_global: { Args: { _nome: string }; Returns: undefined }
+      seed_default_profiles_for_company: {
+        Args: { _company_id: string }
+        Returns: undefined
       }
       template_registrar_uso: {
         Args: { _template_id: string }
