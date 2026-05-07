@@ -3886,6 +3886,137 @@ export type Database = {
         }
         Relationships: []
       }
+      wa_conversas: {
+        Row: {
+          agente_id: string | null
+          closed_at: string | null
+          created_at: string | null
+          eleitor_id: string | null
+          fila_id: string | null
+          id: string
+          protocolo: number
+          status: string | null
+          ultima_interacao: string | null
+          ultima_mensagem: string | null
+          wa_id: string
+          wa_nome: string | null
+          wa_numero: string
+        }
+        Insert: {
+          agente_id?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          eleitor_id?: string | null
+          fila_id?: string | null
+          id?: string
+          protocolo?: number
+          status?: string | null
+          ultima_interacao?: string | null
+          ultima_mensagem?: string | null
+          wa_id: string
+          wa_nome?: string | null
+          wa_numero: string
+        }
+        Update: {
+          agente_id?: string | null
+          closed_at?: string | null
+          created_at?: string | null
+          eleitor_id?: string | null
+          fila_id?: string | null
+          id?: string
+          protocolo?: number
+          status?: string | null
+          ultima_interacao?: string | null
+          ultima_mensagem?: string | null
+          wa_id?: string
+          wa_nome?: string | null
+          wa_numero?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wa_conversas_eleitor_id_fkey"
+            columns: ["eleitor_id"]
+            isOneToOne: false
+            referencedRelation: "eleitores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wa_conversas_fila_id_fkey"
+            columns: ["fila_id"]
+            isOneToOne: false
+            referencedRelation: "wa_filas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wa_filas: {
+        Row: {
+          ativa: boolean | null
+          cor: string | null
+          created_at: string | null
+          descricao: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          ativa?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          ativa?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      wa_mensagens: {
+        Row: {
+          conversa_id: string | null
+          corpo: string
+          created_at: string | null
+          direcao: string
+          id: string
+          remetente_id: string | null
+          status: string | null
+          tipo: string | null
+        }
+        Insert: {
+          conversa_id?: string | null
+          corpo: string
+          created_at?: string | null
+          direcao: string
+          id?: string
+          remetente_id?: string | null
+          status?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          conversa_id?: string | null
+          corpo?: string
+          created_at?: string | null
+          direcao?: string
+          id?: string
+          remetente_id?: string | null
+          status?: string | null
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wa_mensagens_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "wa_conversas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_entregas: {
         Row: {
           created_at: string
