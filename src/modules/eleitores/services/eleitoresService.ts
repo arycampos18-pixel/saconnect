@@ -60,6 +60,7 @@ export type Filtros = {
   bairro?: string;
   tagId?: string;
   liderancaId?: string;
+  caboId?: string;
 };
 
 export const eleitoresService = {
@@ -75,6 +76,8 @@ export const eleitoresService = {
     if (filtros.bairro && filtros.bairro !== "todos") query = query.eq("bairro", filtros.bairro);
     if (filtros.liderancaId && filtros.liderancaId !== "todas")
       query = query.eq("lideranca_id", filtros.liderancaId);
+    if (filtros.caboId && filtros.caboId !== "todos")
+      query = query.eq("cabo_eleitoral_id", filtros.caboId);
     if (filtros.search) {
       const s = filtros.search.replace(/[%_]/g, "");
       query = query.or(`nome.ilike.%${s}%,telefone.ilike.%${s}%,cpf.ilike.%${s}%`);
