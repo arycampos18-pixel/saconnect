@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { auditoriaService } from "@/modules/auditoria/services/auditoriaService";
 
 export type Lideranca = {
   id: string;
@@ -56,15 +57,27 @@ export const liderancasCabosService = {
   async criarLideranca(input: Partial<Lideranca>) {
     const { data, error } = await sb.from("liderancas").insert(input).select().single();
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Criar", entidade: "Liderança", entidade_id: data.id,
+      modulo: "Político", descricao: `Liderança criada: ${data.nome}`, dados_novos: data,
+    });
     return data as Lideranca;
   },
   async atualizarLideranca(id: string, patch: Partial<Lideranca>) {
     const { error } = await sb.from("liderancas").update(patch).eq("id", id);
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Editar", entidade: "Liderança", entidade_id: id,
+      modulo: "Político", descricao: `Liderança atualizada`, dados_novos: patch,
+    });
   },
   async removerLideranca(id: string) {
     const { error } = await sb.from("liderancas").delete().eq("id", id);
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Excluir", entidade: "Liderança", entidade_id: id, modulo: "Político",
+      descricao: `Liderança removida`,
+    });
   },
 
   // ---------- Cabos ----------
@@ -79,15 +92,27 @@ export const liderancasCabosService = {
   async criarCabo(input: Partial<Cabo>) {
     const { data, error } = await sb.from("cabos_eleitorais").insert(input).select().single();
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Criar", entidade: "Cabo Eleitoral", entidade_id: data.id,
+      modulo: "Político", descricao: `Cabo criado: ${data.nome}`, dados_novos: data,
+    });
     return data as Cabo;
   },
   async atualizarCabo(id: string, patch: Partial<Cabo>) {
     const { error } = await sb.from("cabos_eleitorais").update(patch).eq("id", id);
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Editar", entidade: "Cabo Eleitoral", entidade_id: id,
+      modulo: "Político", descricao: `Cabo atualizado`, dados_novos: patch,
+    });
   },
   async removerCabo(id: string) {
     const { error } = await sb.from("cabos_eleitorais").delete().eq("id", id);
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Excluir", entidade: "Cabo Eleitoral", entidade_id: id, modulo: "Político",
+      descricao: `Cabo removido`,
+    });
   },
 
   // ---------- Cabo logado ----------
