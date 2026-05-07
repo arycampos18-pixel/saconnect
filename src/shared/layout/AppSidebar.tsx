@@ -43,7 +43,8 @@ import {
   MessageSquare,
   Smartphone,
   Plug,
-  LayoutDashboard,
+   LayoutDashboard,
+   Package,
   type LucideIcon,
 } from "lucide-react";
 import {
