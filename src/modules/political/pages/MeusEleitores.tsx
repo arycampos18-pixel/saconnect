@@ -12,6 +12,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
 import { liderancasCabosService } from "../services/liderancasCabosService";
+import { hierarquiaDashboardService } from "../services/hierarquiaDashboardService";
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 export default function MeusEleitores() {
   const { user } = useAuth();
@@ -33,6 +38,12 @@ export default function MeusEleitores() {
     queryKey: ["meus-links", cabo?.id],
     enabled: !!cabo,
     queryFn: () => liderancasCabosService.listarLinks(cabo!.id),
+  });
+
+  const { data: serie7d = [] } = useQuery({
+    queryKey: ["meu-cabo-serie", cabo?.id],
+    enabled: !!cabo,
+    queryFn: () => hierarquiaDashboardService.serieMeuCabo7d(cabo!.id),
   });
 
   const [openManual, setOpenManual] = useState(false);
@@ -96,6 +107,14 @@ export default function MeusEleitores() {
     manual: eleitores.filter((e: any) => e.origem === "Manual Cabo").length,
   }), [eleitores]);
 
+  const origemData = useMemo(() => {
+    const map: Record<string, number> = {};
+    eleitores.forEach((e: any) => { map[e.origem || "—"] = (map[e.origem || "—"] ?? 0) + 1; });
+    return Object.entries(map).map(([nome, qtd]) => ({ nome, qtd }));
+  }, [eleitores]);
+
+  const origemColors = ["hsl(var(--primary))", "hsl(var(--accent))", "#f59e0b", "#10b981", "#6366f1"];
+
   return (
     <div className="space-y-4">
       <div>
@@ -108,6 +127,43 @@ export default function MeusEleitores() {
         <Stat label="Ativos" value={stats.ativos} />
         <Stat label="Via Link/QR" value={stats.viaLink} />
         <Stat label="Manual" value={stats.manual} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Cadastros (últimos 7 dias)</CardTitle></CardHeader>
+          <CardContent className="h-60">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={serie7d}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="dia" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="cadastros" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-base">Origem dos cadastros</CardTitle></CardHeader>
+          <CardContent className="h-60">
+            {origemData.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sem dados ainda.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={origemData} dataKey="qtd" nameKey="nome" outerRadius={80} label>
+                    {origemData.map((_, i) => (
+                      <Cell key={i} fill={origemColors[i % origemColors.length]} />
+                    ))}
+                  </Pie>
+                  <Legend />
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="lista">
