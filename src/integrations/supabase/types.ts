@@ -349,6 +349,63 @@ export type Database = {
         }
         Relationships: []
       }
+      cabo_links_captacao: {
+        Row: {
+          ativo: boolean
+          cabo_eleitoral_id: string
+          company_id: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          nome: string | null
+          tipo: string
+          token: string
+          total_cadastros: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cabo_eleitoral_id: string
+          company_id: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          nome?: string | null
+          tipo?: string
+          token?: string
+          total_cadastros?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cabo_eleitoral_id?: string
+          company_id?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          nome?: string | null
+          tipo?: string
+          token?: string
+          total_cadastros?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cabo_links_captacao_cabo_eleitoral_id_fkey"
+            columns: ["cabo_eleitoral_id"]
+            isOneToOne: false
+            referencedRelation: "cabos_eleitorais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cabo_links_captacao_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "settings_companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cabos_eleitorais: {
         Row: {
           ativo: boolean
@@ -359,16 +416,22 @@ export type Database = {
           complemento: string | null
           created_at: string
           created_by: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          email: string | null
           id: string
           lideranca_id: string
           meta: number
           nome: string
           numero: string | null
+          observacoes: string | null
           rua: string | null
+          status: string
           telefone: string | null
           uf: string | null
           updated_at: string
           user_id: string | null
+          zona: string | null
         }
         Insert: {
           ativo?: boolean
@@ -379,16 +442,22 @@ export type Database = {
           complemento?: string | null
           created_at?: string
           created_by?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          email?: string | null
           id?: string
           lideranca_id: string
           meta?: number
           nome: string
           numero?: string | null
+          observacoes?: string | null
           rua?: string | null
+          status?: string
           telefone?: string | null
           uf?: string | null
           updated_at?: string
           user_id?: string | null
+          zona?: string | null
         }
         Update: {
           ativo?: boolean
@@ -399,16 +468,22 @@ export type Database = {
           complemento?: string | null
           created_at?: string
           created_by?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          email?: string | null
           id?: string
           lideranca_id?: string
           meta?: number
           nome?: string
           numero?: string | null
+          observacoes?: string | null
           rua?: string | null
+          status?: string
           telefone?: string | null
           uf?: string | null
           updated_at?: string
           user_id?: string | null
+          zona?: string | null
         }
         Relationships: [
           {
@@ -1436,6 +1511,7 @@ export type Database = {
         Row: {
           ativo: boolean
           bairro: string | null
+          cabo_eleitoral_id: string | null
           cabo_id: string | null
           cep: string | null
           cidade: string | null
@@ -1462,6 +1538,7 @@ export type Database = {
         Insert: {
           ativo?: boolean
           bairro?: string | null
+          cabo_eleitoral_id?: string | null
           cabo_id?: string | null
           cep?: string | null
           cidade?: string | null
@@ -1488,6 +1565,7 @@ export type Database = {
         Update: {
           ativo?: boolean
           bairro?: string | null
+          cabo_eleitoral_id?: string | null
           cabo_id?: string | null
           cep?: string | null
           cidade?: string | null
@@ -1512,6 +1590,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "eleitores_cabo_eleitoral_id_fkey"
+            columns: ["cabo_eleitoral_id"]
+            isOneToOne: false
+            referencedRelation: "cabos_eleitorais"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "eleitores_cabo_id_fkey"
             columns: ["cabo_id"]
@@ -1958,18 +2043,25 @@ export type Database = {
         Row: {
           ativo: boolean
           bairro: string | null
+          bairros: Json | null
           cep: string | null
           cidade: string | null
           company_id: string | null
           complemento: string | null
           created_at: string
           created_by: string | null
+          data_fim: string | null
+          data_inicio: string | null
+          email: string | null
           id: string
           meta: number
           nome: string
           numero: string | null
+          observacoes: string | null
           organizacao_id: string | null
+          regiao: string | null
           rua: string | null
+          status: string
           superior_id: string | null
           telefone: string | null
           uf: string | null
@@ -1979,18 +2071,25 @@ export type Database = {
         Insert: {
           ativo?: boolean
           bairro?: string | null
+          bairros?: Json | null
           cep?: string | null
           cidade?: string | null
           company_id?: string | null
           complemento?: string | null
           created_at?: string
           created_by?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          email?: string | null
           id?: string
           meta?: number
           nome: string
           numero?: string | null
+          observacoes?: string | null
           organizacao_id?: string | null
+          regiao?: string | null
           rua?: string | null
+          status?: string
           superior_id?: string | null
           telefone?: string | null
           uf?: string | null
@@ -2000,18 +2099,25 @@ export type Database = {
         Update: {
           ativo?: boolean
           bairro?: string | null
+          bairros?: Json | null
           cep?: string | null
           cidade?: string | null
           company_id?: string | null
           complemento?: string | null
           created_at?: string
           created_by?: string | null
+          data_fim?: string | null
+          data_inicio?: string | null
+          email?: string | null
           id?: string
           meta?: number
           nome?: string
           numero?: string | null
+          observacoes?: string | null
           organizacao_id?: string | null
+          regiao?: string | null
           rua?: string | null
+          status?: string
           superior_id?: string | null
           telefone?: string | null
           uf?: string | null
