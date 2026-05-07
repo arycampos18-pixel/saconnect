@@ -136,6 +136,7 @@ const CabosEleitorais = lazy(() => import("@/modules/political/pages/CabosEleito
 const MeusEleitores = lazy(() => import("@/modules/political/pages/MeusEleitores"));
 const CadastroCaboPublico = lazy(() => import("@/modules/political/pages/CadastroCaboPublico"));
 const HierarquiaDashboard = lazy(() => import("@/modules/political/pages/HierarquiaDashboard"));
+const MetasGamificacao = lazy(() => import("@/modules/political/pages/MetasGamificacao"));
 
 // Módulo 5 — WhatsApp Meta (API Oficial)
 const MetaLayout = lazy(() => import("@/modules/whatsapp-meta/pages/MetaLayout"));
@@ -278,6 +279,7 @@ const App = () => (
                 <Route path="cabos" element={<CabosEleitorais />} />
                 <Route path="meus-eleitores" element={<MeusEleitores />} />
                 <Route path="hierarquia" element={<HierarquiaDashboard />} />
+                <Route path="metas-gamificacao" element={<MetasGamificacao />} />
               </Route>
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<Navigate to="dashboard" replace />} />
