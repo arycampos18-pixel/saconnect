@@ -154,6 +154,7 @@ const main: Item[] = [
       { title: "Lideranças", url: "/app/political/liderancas", icon: ShieldCheck },
       { title: "Cabos Eleitorais", url: "/app/political/cabos", icon: Megaphone },
       { title: "Meus Eleitores", url: "/app/political/meus-eleitores", icon: UserPlus },
+      { title: "Dashboard Hierárquico", url: "/app/political/hierarquia", icon: LayoutDashboard },
       { title: "CRM Eleitoral", url: "/app/political/crm", icon: Kanban },
       { title: "Eventos", url: "/app/political/events", icon: Calendar },
       { title: "Agenda", url: "/app/political/agenda", icon: CalendarDays },
