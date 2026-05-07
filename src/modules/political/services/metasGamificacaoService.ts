@@ -198,4 +198,11 @@ export const metasGamificacaoService = {
     arr = arr.slice(0, opts?.limit ?? 50).map((it, i) => ({ ...it, posicao: i + 1 }));
     return arr;
   },
+
+  // ---------- Alertas ----------
+  async verificarMetasAgora(): Promise<{ meta_id: string; alerta: string; notificados: number }[]> {
+    const { data, error } = await sb.rpc("gamificacao_verificar_metas");
+    if (error) throw error;
+    return data ?? [];
+  },
 };
