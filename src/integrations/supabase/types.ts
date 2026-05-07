@@ -5120,6 +5120,14 @@ export type Database = {
         Args: { _nome: string; _permission_ids: string[] }
         Returns: undefined
       }
+      gamificacao_verificar_metas: {
+        Args: never
+        Returns: {
+          alerta: string
+          meta_id: string
+          notificados: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
