@@ -27,7 +27,7 @@ export function ProtectedRoute({ children, allowedRoles }: Props) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (profile?.ativo === false) {
+   if (profile !== null && profile.ativo === false) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
