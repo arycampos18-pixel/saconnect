@@ -57,7 +57,7 @@ function aplicaFiltros(eleitores: any[], tagsRel: any[], f: SegmentoFiltros): an
     if (f.consentimentoLgpd === true && !e.consentimento_lgpd) return false;
     if (f.consentimentoLgpd === false && e.consentimento_lgpd) return false;
     if (f.liderancaIds?.length && !f.liderancaIds.includes(e.lideranca_id)) return false;
-    if (f.caboIds?.length && !f.caboIds.includes(e.cabo_id)) return false;
+    if (f.caboIds?.length && !f.caboIds.includes(e.cabo_eleitoral_id)) return false;
     if (f.idadeMin != null || f.idadeMax != null) {
       const idade = calcularIdade(e.data_nascimento);
       if (idade == null) return false;
@@ -105,7 +105,7 @@ export const segmentacaoService = {
 
   async preview(filtros: SegmentoFiltros) {
     const [els, rels] = await Promise.all([
-      supabase.from("eleitores").select("id, nome, telefone, email, bairro, cidade, genero, origem, data_nascimento, consentimento_lgpd, lideranca_id, cabo_id"),
+      supabase.from("eleitores").select("id, nome, telefone, email, bairro, cidade, genero, origem, data_nascimento, consentimento_lgpd, lideranca_id, cabo_eleitoral_id"),
       supabase.from("eleitor_tags").select("eleitor_id, tag_id"),
     ]);
     if (els.error) throw els.error;
