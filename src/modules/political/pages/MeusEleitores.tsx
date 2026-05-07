@@ -13,6 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
 import { liderancasCabosService } from "../services/liderancasCabosService";
 import { hierarquiaDashboardService } from "../services/hierarquiaDashboardService";
+import { metasGamificacaoService } from "../services/metasGamificacaoService";
+import { Progress } from "@/components/ui/progress";
+import { Award, Target } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, Legend,
@@ -44,6 +47,24 @@ export default function MeusEleitores() {
     queryKey: ["meu-cabo-serie", cabo?.id],
     enabled: !!cabo,
     queryFn: () => hierarquiaDashboardService.serieMeuCabo7d(cabo!.id),
+  });
+
+  const { data: metasProg = [] } = useQuery({
+    queryKey: ["meu-cabo-metas", cabo?.id],
+    enabled: !!cabo,
+    queryFn: () => metasGamificacaoService.progressoMetasAtivas({ caboId: cabo!.id }),
+  });
+
+  const { data: minhasBadges = [] } = useQuery({
+    queryKey: ["meu-cabo-badges", cabo?.id],
+    enabled: !!cabo,
+    queryFn: () => metasGamificacaoService.badgesDoCabo(cabo!.id),
+  });
+
+  const { data: ranking = [] } = useQuery({
+    queryKey: ["ranking-do-cabo", cabo?.lideranca_id],
+    enabled: !!cabo,
+    queryFn: () => metasGamificacaoService.ranking({ liderancaId: cabo!.lideranca_id ?? undefined, limit: 50 }),
   });
 
   const [openManual, setOpenManual] = useState(false);
@@ -165,6 +186,57 @@ export default function MeusEleitores() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Target className="h-4 w-4" />Minhas metas ativas</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {metasProg.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma meta atribuída no momento.</p>}
+            {metasProg.map(p => (
+              <div key={p.meta.id} className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{p.meta.titulo}</span>
+                  <span>{p.realizado}/{p.meta.quantidade_alvo} ({p.percentual}%)</span>
+                </div>
+                <Progress value={p.percentual} />
+                <div className="text-xs text-muted-foreground">{p.meta.tipo_periodo} · {p.meta.data_inicio} → {p.meta.data_fim}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Award className="h-4 w-4" />Minhas conquistas</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {minhasBadges.length === 0 && <p className="text-sm text-muted-foreground">Sem conquistas ainda.</p>}
+            {minhasBadges.map(b => (
+              <div key={b.id} title={b.badge?.descricao ?? ""} className="flex items-center gap-2 rounded-full border px-2 py-1 text-xs"
+                style={{ borderColor: b.badge?.cor, color: b.badge?.cor }}>
+                <Award className="h-3.5 w-3.5" />
+                <span className="font-medium">{b.badge?.nome}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Ranking da minha liderança</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          {ranking.length === 0 ? <p className="p-6 text-sm text-muted-foreground">Sem dados.</p> :
+            <div className="divide-y">
+              {ranking.slice(0, 10).map(r => (
+                <div key={r.cabo_id} className={`flex items-center justify-between p-3 ${r.cabo_id === cabo.id ? "bg-primary/5" : ""}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${r.posicao === 1 ? "bg-yellow-500 text-white" : r.posicao === 2 ? "bg-gray-400 text-white" : r.posicao === 3 ? "bg-amber-700 text-white" : "bg-muted"}`}>{r.posicao}</div>
+                    <div className="text-sm font-medium">{r.cabo_nome} {r.cabo_id === cabo.id && <span className="text-xs text-primary">(você)</span>}</div>
+                  </div>
+                  <div className="font-bold">{r.total}</div>
+                </div>
+              ))}
+            </div>
+          }
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="lista">
         <TabsList>
