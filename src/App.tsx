@@ -131,6 +131,10 @@ const Predictions = lazy(() => import("@/modules/political/pages/Predictions"));
 const Competitors = lazy(() => import("@/modules/political/pages/Competitors"));
 const Segmentation = lazy(() => import("@/modules/political/pages/Segmentation"));
 const CabinetDepartments = lazy(() => import("@/modules/political/pages/CabinetDepartments"));
+const Liderancas = lazy(() => import("@/modules/political/pages/Liderancas"));
+const CabosEleitorais = lazy(() => import("@/modules/political/pages/CabosEleitorais"));
+const MeusEleitores = lazy(() => import("@/modules/political/pages/MeusEleitores"));
+const CadastroCaboPublico = lazy(() => import("@/modules/political/pages/CadastroCaboPublico"));
 
 // Módulo 5 — WhatsApp Meta (API Oficial)
 const MetaLayout = lazy(() => import("@/modules/whatsapp-meta/pages/MetaLayout"));
@@ -180,6 +184,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/cadastro-publico" element={<CadastroPublico />} />
             <Route path="/p/:slug" element={<PesquisaPublica />} />
+            <Route path="/cabo/r/:token" element={<CadastroCaboPublico />} />
             <Route
               path="/app"
               element={
@@ -268,6 +273,9 @@ const App = () => (
                 <Route path="competitors" element={<Competitors />} />
                 <Route path="segmentation" element={<Segmentation />} />
                 <Route path="departments" element={<CabinetDepartments />} />
+                <Route path="liderancas" element={<Liderancas />} />
+                <Route path="cabos" element={<CabosEleitorais />} />
+                <Route path="meus-eleitores" element={<MeusEleitores />} />
               </Route>
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<Navigate to="dashboard" replace />} />
