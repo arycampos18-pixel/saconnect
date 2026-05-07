@@ -151,6 +151,11 @@ export const liderancasCabosService = {
       .select()
       .single();
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Criar", entidade: "Eleitor (Cabo)", entidade_id: data.id,
+      modulo: "Político", descricao: `Cadastro manual de eleitor: ${payload.nome}`,
+      dados_novos: { nome: payload.nome, telefone: payload.telefone },
+    });
     return data;
   },
 
@@ -167,14 +172,26 @@ export const liderancasCabosService = {
   async criarLink(input: { cabo_eleitoral_id: string; company_id: string; tipo: "link" | "qrcode"; nome?: string }) {
     const { data, error } = await sb.from("cabo_links_captacao").insert(input).select().single();
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Criar", entidade: "Link Captação", entidade_id: data.id,
+      modulo: "Político", descricao: `${input.tipo === "qrcode" ? "QR Code" : "Link"} de captação criado`,
+    });
     return data as CaboLink;
   },
   async toggleLink(id: string, ativo: boolean) {
     const { error } = await sb.from("cabo_links_captacao").update({ ativo }).eq("id", id);
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Editar", entidade: "Link Captação", entidade_id: id,
+      modulo: "Político", descricao: `Link ${ativo ? "ativado" : "desativado"}`,
+    });
   },
   async removerLink(id: string) {
     const { error } = await sb.from("cabo_links_captacao").delete().eq("id", id);
     if (error) throw error;
+    auditoriaService.registrar({
+      acao: "Excluir", entidade: "Link Captação", entidade_id: id,
+      modulo: "Político", descricao: `Link removido`,
+    });
   },
 };
