@@ -20,8 +20,10 @@ export type Eleitor = {
   origem: string;
   observacoes: string | null;
   consentimento_lgpd: boolean;
-  lideranca_id: string | null;
-  cabo_id: string | null;
+   lideranca_id: string | null;
+   cabo_eleitoral_id: string | null;
+   score_fidelidade: number;
+   ultima_interacao: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

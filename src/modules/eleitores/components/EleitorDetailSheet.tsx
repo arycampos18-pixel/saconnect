@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  Phone, MapPin, IdCard, Building2, UserCheck, Tag, Shield, MessageCircle, Mail, Trash2, Loader2,
+   Phone, MapPin, IdCard, Building2, UserCheck, Tag, Shield, MessageCircle, Mail, Trash2, Loader2, TrendingUp, Star,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -73,8 +73,11 @@ export function EleitorDetailSheet({ eleitor, onOpenChange, onDeleted }: Props) 
                 <SheetDescription className="text-primary-foreground/80">
                   {[eleitor.bairro, eleitor.cidade].filter(Boolean).join(" · ") || "—"}
                 </SheetDescription>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {eleitor.tags.map((t) => (
+               <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                   <Badge className="bg-white/20 text-white border-0">
+                     <Star className="mr-1 h-3 w-3 fill-white" /> {eleitor.score_fidelidade}% Fidelidade
+                   </Badge>
+                   {eleitor.tags.map((t) => (
                     <Badge key={t.id} className="border-0 bg-white/15 text-primary-foreground hover:bg-white/25">
                       {t.nome}
                     </Badge>
@@ -109,9 +112,10 @@ export function EleitorDetailSheet({ eleitor, onOpenChange, onDeleted }: Props) 
             <div className="grid grid-cols-1 gap-3">
               <Field icon={Tag} label="Origem do Cadastro" value={eleitor.origem} />
               <Field icon={UserCheck} label="Liderança Responsável" value={eleitor.lideranca?.nome ?? "—"} />
-              <Field icon={UserCheck} label="Cabo Eleitoral" value={eleitor.cabo?.nome ?? "—"} />
-            </div>
-          </section>
+               <Field icon={UserCheck} label="Cabo Eleitoral" value={eleitor.cabo?.nome ?? "—"} />
+               <Field icon={TrendingUp} label="Score de Fidelidade" value={`${eleitor.score_fidelidade}%`} />
+             </div>
+           </section>
 
           <section>
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
