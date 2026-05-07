@@ -43,12 +43,9 @@ export default function Login() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!authLoading && session && isSessionValid(session) && profile?.ativo !== false) {
-      authLog("info", "login.redirect_to_app", { userId: session.user?.id });
-      navigate("/app", { replace: true });
-    }
-  }, [authLoading, session, profile, navigate]);
+   // O redirect automático para /app caso logado é lidado pelo PublicRoute no App.tsx.
+   // Removendo este useEffect para evitar loops ou redirecionamentos indesejados
+   // enquanto o estado de carregamento do AuthProvider/PublicRoute não estabiliza.
 
   // tick para countdown do bloqueio
   useEffect(() => {

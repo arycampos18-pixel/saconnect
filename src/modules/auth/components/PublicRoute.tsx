@@ -18,7 +18,9 @@ export function PublicRoute({ children }: Props) {
     );
   }
 
-  if (session && isSessionValid(session) && profile?.ativo !== false) {
+   const isActuallyAuthenticated = session && isSessionValid(session) && profile !== null && profile.ativo !== false;
+
+   if (isActuallyAuthenticated) {
     authLog("info", "public_route.redirect_to_app", { userId: session.user?.id });
     return <Navigate to="/app" replace />;
   }
