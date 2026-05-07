@@ -349,6 +349,90 @@ export type Database = {
         }
         Relationships: []
       }
+      badges_catalogo: {
+        Row: {
+          ativo: boolean
+          company_id: string
+          cor: string
+          created_at: string
+          criterio_tipo: string
+          criterio_valor: number
+          descricao: string | null
+          icone: string
+          id: string
+          nome: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          company_id: string
+          cor?: string
+          created_at?: string
+          criterio_tipo: string
+          criterio_valor?: number
+          descricao?: string | null
+          icone?: string
+          id?: string
+          nome: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          company_id?: string
+          cor?: string
+          created_at?: string
+          criterio_tipo?: string
+          criterio_valor?: number
+          descricao?: string | null
+          icone?: string
+          id?: string
+          nome?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cabo_badges: {
+        Row: {
+          badge_id: string
+          cabo_eleitoral_id: string
+          company_id: string
+          conquistado_em: string
+          contexto: Json | null
+          id: string
+        }
+        Insert: {
+          badge_id: string
+          cabo_eleitoral_id: string
+          company_id: string
+          conquistado_em?: string
+          contexto?: Json | null
+          id?: string
+        }
+        Update: {
+          badge_id?: string
+          cabo_eleitoral_id?: string
+          company_id?: string
+          conquistado_em?: string
+          contexto?: Json | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cabo_badges_badge_id_fkey"
+            columns: ["badge_id"]
+            isOneToOne: false
+            referencedRelation: "badges_catalogo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cabo_badges_cabo_eleitoral_id_fkey"
+            columns: ["cabo_eleitoral_id"]
+            isOneToOne: false
+            referencedRelation: "cabos_eleitorais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cabo_links_captacao: {
         Row: {
           ativo: boolean
@@ -2322,6 +2406,72 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      metas_captacao: {
+        Row: {
+          ativo: boolean
+          cabo_eleitoral_id: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          data_fim: string
+          data_inicio: string
+          descricao: string | null
+          id: string
+          lideranca_id: string | null
+          quantidade_alvo: number
+          tipo_periodo: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cabo_eleitoral_id?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          data_fim: string
+          data_inicio: string
+          descricao?: string | null
+          id?: string
+          lideranca_id?: string | null
+          quantidade_alvo: number
+          tipo_periodo?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cabo_eleitoral_id?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          data_fim?: string
+          data_inicio?: string
+          descricao?: string | null
+          id?: string
+          lideranca_id?: string | null
+          quantidade_alvo?: number
+          tipo_periodo?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_captacao_cabo_eleitoral_id_fkey"
+            columns: ["cabo_eleitoral_id"]
+            isOneToOne: false
+            referencedRelation: "cabos_eleitorais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_captacao_lideranca_id_fkey"
+            columns: ["lideranca_id"]
+            isOneToOne: false
+            referencedRelation: "liderancas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
