@@ -74,6 +74,6 @@
        .update({ ultima_mensagem: corpo, ultima_interacao: new Date().toISOString() })
        .eq('id', conversaId);
 
-     return data;
+     return data as WAMensagem;
    }
  };
