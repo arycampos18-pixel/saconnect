@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Target, Award, Trophy, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, Target, Award, Trophy, Sparkles, Bell } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -98,6 +98,14 @@ export default function MetasGamificacao() {
     qc.invalidateQueries({ queryKey: ["badges"] });
   }
 
+  async function verificarMetas() {
+    try {
+      const r = await metasGamificacaoService.verificarMetasAgora();
+      const totalNotif = r.reduce((s, x) => s + x.notificados, 0);
+      toast.success(`Verificação concluída — ${r.length} meta(s) avaliadas, ${totalNotif} notificações enviadas`);
+    } catch (e: any) { toast.error(e.message); }
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -114,7 +122,8 @@ export default function MetasGamificacao() {
 
         {/* METAS */}
         <TabsContent value="metas" className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={verificarMetas}><Bell className="h-4 w-4 mr-2" />Verificar metas agora</Button>
             <Button onClick={newMeta}><Plus className="h-4 w-4 mr-2" />Nova meta</Button>
           </div>
 
