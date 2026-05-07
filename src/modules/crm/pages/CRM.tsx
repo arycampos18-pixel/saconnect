@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, ChevronLeft, ChevronRight, Calendar, AlertCircle, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { crmService, type Etapa, type Oportunidade, type Tarefa } from "../services/crmService";
@@ -12,6 +13,7 @@ import { TarefaFormDialog } from "../components/TarefaFormDialog";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, CartesianGrid, Tooltip, Cell } from "recharts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { liderancasCabosService, type Lideranca, type Cabo } from "@/modules/political/services/liderancasCabosService";
 
 export default function CRM() {
   const [etapas, setEtapas] = useState<Etapa[]>([]);
@@ -21,6 +23,10 @@ export default function CRM() {
   const [openOp, setOpenOp] = useState(false);
   const [openTar, setOpenTar] = useState(false);
   const [etapaInicial, setEtapaInicial] = useState<string | undefined>();
+  const [liderancas, setLiderancas] = useState<Lideranca[]>([]);
+  const [cabos, setCabos] = useState<Cabo[]>([]);
+  const [filtroLid, setFiltroLid] = useState("todas");
+  const [filtroCabo, setFiltroCabo] = useState("todos");
 
   const carregar = async () => {
     setLoading(true);
@@ -31,6 +37,11 @@ export default function CRM() {
         crmService.listarTarefas(),
       ]);
       setEtapas(e); setOportunidades(o); setTarefas(t);
+      const [lids, cbs] = await Promise.all([
+        liderancasCabosService.listarLiderancas().catch(() => []),
+        liderancasCabosService.listarCabos().catch(() => []),
+      ]);
+      setLiderancas(lids); setCabos(cbs);
     } catch (err: any) {
       toast.error("Erro ao carregar CRM", { description: err.message });
     } finally {
@@ -39,6 +50,14 @@ export default function CRM() {
   };
 
   useEffect(() => { carregar(); }, []);
+
+  const oportunidadesFiltradas = useMemo(() => {
+    return oportunidades.filter((o) => {
+      if (filtroLid !== "todas" && o.eleitor?.lideranca_id !== filtroLid) return false;
+      if (filtroCabo !== "todos" && o.eleitor?.cabo_eleitoral_id !== filtroCabo) return false;
+      return true;
+    });
+  }, [oportunidades, filtroLid, filtroCabo]);
 
   const mover = async (op: Oportunidade, dir: -1 | 1) => {
     const idx = etapas.findIndex((e) => e.id === op.etapa_id);
@@ -68,18 +87,18 @@ export default function CRM() {
 
   const funilData = useMemo(() =>
     etapas.filter(e => !e.is_perdido).map((e) => {
-      const ops = oportunidades.filter((o) => o.etapa_id === e.id);
+      const ops = oportunidadesFiltradas.filter((o) => o.etapa_id === e.id);
       return {
         nome: e.nome,
         cor: e.cor,
         qtd: ops.length,
         votos: ops.reduce((acc, o) => acc + (o.valor_estimado ?? 0), 0),
       };
-    }), [etapas, oportunidades]);
+    }), [etapas, oportunidadesFiltradas]);
 
   const totalVotos = funilData.filter(f => f.nome !== "Perdido").reduce((acc, f) => acc + f.votos, 0);
   const ganhoEtapa = etapas.find(e => e.is_ganho);
-  const votosGanhos = oportunidades.filter(o => o.etapa_id === ganhoEtapa?.id).reduce((acc, o) => acc + o.valor_estimado, 0);
+  const votosGanhos = oportunidadesFiltradas.filter(o => o.etapa_id === ganhoEtapa?.id).reduce((acc, o) => acc + o.valor_estimado, 0);
   const taxaConv = totalVotos > 0 ? Math.round((votosGanhos / totalVotos) * 100) : 0;
 
   const tarefasPendentes = tarefas.filter(t => !t.concluida);
@@ -93,10 +112,28 @@ export default function CRM() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-4">
-        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Oportunidades</p><p className="text-2xl font-bold">{oportunidades.length}</p></CardContent></Card>
+        <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Oportunidades</p><p className="text-2xl font-bold">{oportunidadesFiltradas.length}</p></CardContent></Card>
         <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Votos no funil</p><p className="text-2xl font-bold text-primary">{totalVotos}</p></CardContent></Card>
         <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Conversão</p><p className="text-2xl font-bold">{taxaConv}%</p></CardContent></Card>
         <Card><CardContent className="pt-4"><p className="text-xs text-muted-foreground">Tarefas atrasadas</p><p className="text-2xl font-bold text-destructive">{tarefasAtrasadas.length}</p></CardContent></Card>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Select value={filtroLid} onValueChange={(v) => { setFiltroLid(v); setFiltroCabo("todos"); }}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Liderança" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas as lideranças</SelectItem>
+            {liderancas.map((l) => <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filtroCabo} onValueChange={setFiltroCabo}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Cabo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os cabos</SelectItem>
+            {cabos.filter((c) => filtroLid === "todas" || c.lideranca_id === filtroLid)
+              .map((c) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Tabs defaultValue="pipeline">
@@ -117,7 +154,7 @@ export default function CRM() {
           ) : (
             <div className="grid gap-3 overflow-x-auto" style={{ gridTemplateColumns: `repeat(${etapas.length}, minmax(240px, 1fr))` }}>
               {etapas.map((e) => {
-                const ops = oportunidades.filter((o) => o.etapa_id === e.id);
+                const ops = oportunidadesFiltradas.filter((o) => o.etapa_id === e.id);
                 return (
                   <div key={e.id} className="rounded-lg border bg-card">
                     <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderTopColor: e.cor, borderTopWidth: 3 }}>
