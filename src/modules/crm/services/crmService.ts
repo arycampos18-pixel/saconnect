@@ -20,7 +20,7 @@ export interface Oportunidade {
   ordem: number;
   created_at: string;
   updated_at: string;
-  eleitor?: { nome: string; telefone: string | null } | null;
+  eleitor?: { nome: string; telefone: string | null; lideranca_id: string | null; cabo_eleitoral_id: string | null } | null;
 }
 
 export interface Tarefa {
@@ -61,7 +61,7 @@ export const crmService = {
   async listarOportunidades(): Promise<Oportunidade[]> {
     const { data, error } = await supabase
       .from("crm_oportunidades")
-      .select("*, eleitor:eleitores(nome, telefone)")
+      .select("*, eleitor:eleitores(nome, telefone, lideranca_id, cabo_eleitoral_id)")
       .order("ordem", { ascending: true });
     if (error) throw error;
     return (data ?? []) as any;
