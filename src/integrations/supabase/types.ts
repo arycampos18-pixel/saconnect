@@ -4986,6 +4986,17 @@ export type Database = {
         Args: { _pesquisa_id: string; _telefone: string }
         Returns: boolean
       }
+      public_get_cabo_link: {
+        Args: { _token: string }
+        Returns: {
+          ativo: boolean
+          cabo_nome: string
+          company_id: string
+          expires_at: string
+          id: string
+          nome: string
+        }[]
+      }
       public_get_department_qrcode: {
         Args: { _token: string }
         Returns: {
@@ -4995,6 +5006,21 @@ export type Database = {
           id: string
           nome: string
         }[]
+      }
+      public_submit_cabo_link: {
+        Args: {
+          _bairro?: string
+          _cep?: string
+          _cidade?: string
+          _complemento?: string
+          _nome: string
+          _numero?: string
+          _rua?: string
+          _telefone: string
+          _token: string
+          _uf?: string
+        }
+        Returns: string
       }
       public_submit_department_qrcode: {
         Args: {
