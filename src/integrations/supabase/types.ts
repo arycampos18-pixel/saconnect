@@ -1591,6 +1591,47 @@ export type Database = {
           },
         ]
       }
+      eleitor_visitas: {
+        Row: {
+          check_in_realizado: boolean | null
+          data_visita: string | null
+          eleitor_id: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          observacoes: string | null
+          usuario_id: string
+        }
+        Insert: {
+          check_in_realizado?: boolean | null
+          data_visita?: string | null
+          eleitor_id: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          observacoes?: string | null
+          usuario_id: string
+        }
+        Update: {
+          check_in_realizado?: boolean | null
+          data_visita?: string | null
+          eleitor_id?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          observacoes?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eleitor_visitas_eleitor_id_fkey"
+            columns: ["eleitor_id"]
+            isOneToOne: false
+            referencedRelation: "eleitores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       eleitores: {
         Row: {
           ativo: boolean
@@ -1615,8 +1656,10 @@ export type Database = {
           observacoes: string | null
           origem: string
           rua: string | null
+          score_fidelidade: number | null
           telefone: string
           uf: string | null
+          ultima_interacao: string | null
           updated_at: string
         }
         Insert: {
@@ -1642,8 +1685,10 @@ export type Database = {
           observacoes?: string | null
           origem?: string
           rua?: string | null
+          score_fidelidade?: number | null
           telefone: string
           uf?: string | null
+          ultima_interacao?: string | null
           updated_at?: string
         }
         Update: {
@@ -1669,8 +1714,10 @@ export type Database = {
           observacoes?: string | null
           origem?: string
           rua?: string | null
+          score_fidelidade?: number | null
           telefone?: string
           uf?: string | null
+          ultima_interacao?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2231,6 +2278,82 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      materiais_distribuicao: {
+        Row: {
+          cabo_id: string | null
+          data_entrega: string | null
+          id: string
+          lideranca_id: string | null
+          material_id: string | null
+          quantidade: number
+          recebido_por: string | null
+        }
+        Insert: {
+          cabo_id?: string | null
+          data_entrega?: string | null
+          id?: string
+          lideranca_id?: string | null
+          material_id?: string | null
+          quantidade: number
+          recebido_por?: string | null
+        }
+        Update: {
+          cabo_id?: string | null
+          data_entrega?: string | null
+          id?: string
+          lideranca_id?: string | null
+          material_id?: string | null
+          quantidade?: number
+          recebido_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "materiais_distribuicao_cabo_id_fkey"
+            columns: ["cabo_id"]
+            isOneToOne: false
+            referencedRelation: "cabos_eleitorais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "materiais_distribuicao_lideranca_id_fkey"
+            columns: ["lideranca_id"]
+            isOneToOne: false
+            referencedRelation: "liderancas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "materiais_distribuicao_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais_estoque"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      materiais_estoque: {
+        Row: {
+          created_at: string | null
+          id: string
+          nome: string
+          quantidade_total: number | null
+          tipo: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          nome: string
+          quantidade_total?: number | null
+          tipo?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          nome?: string
+          quantidade_total?: number | null
+          tipo?: string | null
+        }
+        Relationships: []
       }
       mensagem_envios: {
         Row: {
