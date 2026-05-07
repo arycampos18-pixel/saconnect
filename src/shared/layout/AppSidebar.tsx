@@ -151,6 +151,9 @@ const main: Item[] = [
     subs: [
       { title: "Eleitores", url: "/app/political/voters", icon: Users },
       { title: "Novo Eleitor", url: "/app/political/capture", icon: UserPlus },
+      { title: "Lideranças", url: "/app/political/liderancas", icon: ShieldCheck },
+      { title: "Cabos Eleitorais", url: "/app/political/cabos", icon: Megaphone },
+      { title: "Meus Eleitores", url: "/app/political/meus-eleitores", icon: UserPlus },
       { title: "CRM Eleitoral", url: "/app/political/crm", icon: Kanban },
       { title: "Eventos", url: "/app/political/events", icon: Calendar },
       { title: "Agenda", url: "/app/political/agenda", icon: CalendarDays },
