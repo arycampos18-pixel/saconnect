@@ -5,7 +5,7 @@
  import { Badge } from "@/components/ui/badge";
  import { ScrollArea } from "@/components/ui/scroll-area";
  import { Avatar, AvatarFallback } from "@/components/ui/avatar";
- import { MessageSquare, Send, User, MapPin, Star, Phone, Hash, Search, Filter, Loader2, StickyNote } from "lucide-react";
+  import { MessageSquare, Send, User, MapPin, Star, Phone, Hash, Search, Filter, Loader2, StickyNote, Plus } from "lucide-react";
  import { waChatService, type WAConversa, type WAMensagem } from "../services/waChatService";
  import { formatDistanceToNow } from "date-fns";
  import { ptBR } from "date-fns/locale";
@@ -45,7 +45,7 @@
      }
    }, [mensagens]);
 
-   const handleSend = async (e?: React.FormEvent, tipo: string = 'texto') => {
+   const handleSend = async (e?: React.FormEvent, tipo: WAMensagem['tipo'] = 'texto') => {
      e?.preventDefault();
      if (!msg.trim() || !ativa || enviando) return;
      setEnviando(true);

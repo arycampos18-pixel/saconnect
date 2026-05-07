@@ -53,7 +53,7 @@
      return data as WAMensagem[];
    },
 
-   async enviarMensagem(conversaId: string, corpo: string, tipo: string = 'texto') {
+   async enviarMensagem(conversaId: string, corpo: string, tipo: WAMensagem['tipo'] = 'texto'): Promise<WAMensagem> {
      const { data: u } = await supabase.auth.getUser();
      const { data, error } = await supabase
        .from('wa_mensagens')
