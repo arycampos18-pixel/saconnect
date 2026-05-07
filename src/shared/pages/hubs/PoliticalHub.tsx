@@ -18,6 +18,7 @@ import {
   Star,
   Megaphone,
   UserSquare2,
+  LayoutDashboard,
 } from "lucide-react";
 import HubLayout from "./HubLayout";
 
@@ -33,6 +34,7 @@ export default function PoliticalHub() {
         { to: "/app/political/liderancas", title: "Lideranças", description: "Gestão de lideranças", icon: Star },
         { to: "/app/political/cabos", title: "Cabos Eleitorais", description: "Cabos vinculados", icon: Megaphone },
         { to: "/app/political/meus-eleitores", title: "Meus Eleitores (Cabo)", description: "Visão do cabo + link/QR", icon: UserSquare2 },
+        { to: "/app/political/hierarquia", title: "Dashboard Hierárquico", description: "Métricas por liderança e cabo", icon: LayoutDashboard },
         { to: "/app/political/crm", title: "CRM Eleitoral", description: "Funil e oportunidades", icon: Kanban },
         { to: "/app/political/events", title: "Eventos Sociais", description: "Agenda pública", icon: Calendar },
         { to: "/app/political/agenda", title: "Agenda do Gabinete", description: "Compromissos internos", icon: CalendarDays },
