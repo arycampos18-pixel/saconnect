@@ -18,6 +18,7 @@ import { catalogosService, type Tag } from "@/modules/eleitores/services/catalog
 import { EleitorDetailSheet } from "@/modules/eleitores/components/EleitorDetailSheet";
 import { downloadCSV, toCSV } from "@/shared/utils/csv";
 import { formatPhoneBR } from "@/shared/utils/phone";
+import { liderancasCabosService, type Lideranca, type Cabo } from "@/modules/political/services/liderancasCabosService";
 
 const PAGE_SIZE = 10;
 
@@ -26,24 +27,32 @@ export default function Eleitores() {
   const [search, setSearch] = useState("");
   const [bairro, setBairro] = useState("todos");
   const [tag, setTag] = useState("todas");
+  const [liderancaId, setLiderancaId] = useState("todas");
+  const [caboId, setCaboId] = useState("todos");
   const [page, setPage] = useState(1);
   const [selecionado, setSelecionado] = useState<EleitorComRelacoes | null>(null);
   const [eleitores, setEleitores] = useState<EleitorComRelacoes[]>([]);
   const [bairros, setBairros] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [liderancas, setLiderancas] = useState<Lideranca[]>([]);
+  const [cabos, setCabos] = useState<Cabo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const carregar = async () => {
     setLoading(true);
     try {
-      const [els, bs, ts] = await Promise.all([
-        eleitoresService.list({ search, bairro, tagId: tag }),
+      const [els, bs, ts, lids, cbs] = await Promise.all([
+        eleitoresService.list({ search, bairro, tagId: tag, liderancaId, caboId }),
         catalogosService.bairros(),
         catalogosService.tags(),
+        liderancasCabosService.listarLiderancas().catch(() => []),
+        liderancasCabosService.listarCabos().catch(() => []),
       ]);
       setEleitores(els);
       setBairros(bs);
       setTags(ts);
+      setLiderancas(lids);
+      setCabos(cbs);
     } catch (e: any) {
       toast.error("Erro ao carregar eleitores: " + e.message);
     } finally {
@@ -54,7 +63,7 @@ export default function Eleitores() {
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, bairro, tag]);
+  }, [search, bairro, tag, liderancaId, caboId]);
 
   const totalPages = Math.max(1, Math.ceil(eleitores.length / PAGE_SIZE));
   const pageItems = useMemo(
@@ -149,6 +158,30 @@ export default function Eleitores() {
                 {tags.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={liderancaId} onValueChange={(v) => { setLiderancaId(v); setCaboId("todos"); setPage(1); }}>
+              <SelectTrigger className="h-10 w-[180px]">
+                <SelectValue placeholder="Liderança" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as lideranças</SelectItem>
+                {liderancas.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={caboId} onValueChange={(v) => { setCaboId(v); setPage(1); }}>
+              <SelectTrigger className="h-10 w-[180px]">
+                <SelectValue placeholder="Cabo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os cabos</SelectItem>
+                {cabos
+                  .filter((c) => liderancaId === "todas" || c.lideranca_id === liderancaId)
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
