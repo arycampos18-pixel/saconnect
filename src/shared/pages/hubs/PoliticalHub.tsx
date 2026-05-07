@@ -15,6 +15,9 @@ import {
   Building2,
   ShieldCheck,
   FileBarChart,
+  Star,
+  Megaphone,
+  UserSquare2,
 } from "lucide-react";
 import HubLayout from "./HubLayout";
 
@@ -27,6 +30,9 @@ export default function PoliticalHub() {
       submodules={[
         { to: "/app/political/voters", title: "Base de Eleitores", description: "Cadastro completo", icon: Users },
         { to: "/app/political/capture", title: "Novo Eleitor", description: "Cadastro rápido", icon: UserPlus },
+        { to: "/app/political/liderancas", title: "Lideranças", description: "Gestão de lideranças", icon: Star },
+        { to: "/app/political/cabos", title: "Cabos Eleitorais", description: "Cabos vinculados", icon: Megaphone },
+        { to: "/app/political/meus-eleitores", title: "Meus Eleitores (Cabo)", description: "Visão do cabo + link/QR", icon: UserSquare2 },
         { to: "/app/political/crm", title: "CRM Eleitoral", description: "Funil e oportunidades", icon: Kanban },
         { to: "/app/political/events", title: "Eventos Sociais", description: "Agenda pública", icon: Calendar },
         { to: "/app/political/agenda", title: "Agenda do Gabinete", description: "Compromissos internos", icon: CalendarDays },
