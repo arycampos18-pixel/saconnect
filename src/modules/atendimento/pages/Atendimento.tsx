@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, MessageCircle, Inbox, CheckCircle2, Clock, Filter, BarChart3, Building2, Zap, ShieldCheck, Route, Settings, Bot, FileBarChart, MessageSquarePlus } from "lucide-react";
+import { Search, MessageCircle, Inbox, CheckCircle2, Clock, Filter, BarChart3, Building2, Zap, ShieldCheck, Route, Settings, Bot, FileBarChart, MessageSquarePlus, Send, Megaphone, AlertTriangle, Loader2, Camera, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { formatPhoneBR } from "@/shared/utils/phone";
 import { useUserRole } from "@/modules/auth/hooks/useUserRole";
 import { cn } from "@/lib/utils";
 import { NovaConversaDialog } from "../components/NovaConversaDialog";
+import { whatsappService } from "@/modules/whatsapp/services/whatsappService";
 
 export default function Atendimento() {
   const qc = useQueryClient();
@@ -25,6 +26,19 @@ export default function Atendimento() {
   const [filtroAt, setFiltroAt] = useState<string>("todos");
   const [apenasMinhas, setApenasMinhas] = useState(false);
   const [novaOpen, setNovaOpen] = useState(false);
+
+  // Validação da conexão Z-API
+  const conn = useQuery({
+    queryKey: ["wa-status-atendimento"],
+    queryFn: () => whatsappService.status(),
+    refetchInterval: (q) => {
+      const d = q.state.data as { connected?: boolean } | undefined;
+      return d?.connected ? 60_000 : 10_000;
+    },
+  });
+  const connOk = !!conn.data?.connected;
+  const credErr = !!conn.data?.credentialsError;
+  const connLoading = conn.isLoading;
 
   const { data: departamentos = [] } = useQuery({
     queryKey: ["departamentos-ativos"],
@@ -88,14 +102,46 @@ export default function Atendimento() {
   }, [conversas, busca]);
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] min-h-[600px] overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+    <div className="relative flex h-[calc(100vh-9rem)] xl:h-[calc(100vh-12rem)] min-h-[500px] overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      {(!connOk && !connLoading) && (
+        <div className="absolute left-1/2 top-4 z-20 -translate-x-1/2">
+          <div className={cn(
+            "flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium shadow-md",
+            credErr ? "border-destructive/30 bg-destructive/5 text-destructive" : "border-amber-300 bg-amber-50 text-amber-800"
+          )}>
+            <AlertTriangle className="h-4 w-4" />
+            {credErr
+              ? "Credenciais Z-API inválidas — conversas não serão recebidas"
+              : "WhatsApp desconectado — novas mensagens não chegarão até reconectar"}
+            <Button asChild size="sm" variant="ghost" className="h-6 px-2 text-xs">
+              <Link to="/app/whatsapp/sessions">Configurar conexão</Link>
+            </Button>
+          </div>
+        </div>
+      )}
       {/* Lista */}
-      <aside className="flex w-full max-w-sm flex-col border-r border-border bg-muted/30">
+      <aside className={cn(
+        "flex w-full flex-col border-r border-border bg-muted/30 xl:max-w-sm",
+        selecionada && "hidden xl:flex",
+      )}>
         <div className="space-y-4 border-b border-border bg-card p-5">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h2 className="text-lg font-bold tracking-tight text-foreground">Atendimento</h2>
-              <p className="text-xs text-muted-foreground">Inbox WhatsApp receptivo</p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Inbox WhatsApp receptivo</span>
+                {connLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                ) : connOk ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> Online
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+                    <span className="h-1.5 w-1.5 rounded-full bg-destructive" /> Offline
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap justify-end gap-1">
               <Button asChild size="icon" variant="outline" className="h-8 w-8 border-border bg-background text-primary hover:border-primary/30 hover:bg-primary/10" title="Dashboard">
@@ -103,6 +149,15 @@ export default function Atendimento() {
               </Button>
               <Button asChild size="icon" variant="outline" className="h-8 w-8 border-border bg-background text-primary hover:border-primary/30 hover:bg-primary/10" title="Relatórios">
                 <Link to="/app/atendimento/relatorios"><FileBarChart className="h-4 w-4" /></Link>
+              </Button>
+              <Button asChild size="icon" variant="outline" className="h-8 w-8 border-border bg-background text-primary hover:border-primary/30 hover:bg-primary/10" title="Envio rico (compositor)">
+                <Link to="/app/atendimento/envio-rico"><Send className="h-4 w-4" /></Link>
+              </Button>
+              <Button asChild size="icon" variant="outline" className="h-8 w-8 border-border bg-background text-primary hover:border-primary/30 hover:bg-primary/10" title="Envio em massa segmentado">
+                <Link to="/app/atendimento/envio-massa"><Megaphone className="h-4 w-4" /></Link>
+              </Button>
+              <Button asChild size="icon" variant="outline" className="h-8 w-8 border-border bg-background text-primary hover:border-primary/30 hover:bg-primary/10" title="Stories WhatsApp">
+                <Link to="/app/atendimento/stories"><Camera className="h-4 w-4" /></Link>
               </Button>
               {isAdmin && (
                 <>
@@ -205,9 +260,21 @@ export default function Atendimento() {
       </aside>
 
       {/* Painel */}
-      <section className="flex-1 bg-background">
+      <section className={cn(
+        "min-w-0 flex-1 bg-background",
+        !selecionada && "hidden xl:block",
+      )}>
         {selecionada ? (
-          <ConversaPainel conversaId={selecionada} />
+          <div className="flex h-full flex-col">
+            <div className="flex items-center gap-2 border-b border-border bg-card px-3 py-2 xl:hidden">
+              <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setSelecionada(null)}>
+                <ArrowLeft className="mr-1 h-4 w-4" /> Conversas
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <ConversaPainel conversaId={selecionada} />
+            </div>
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-6 text-center">
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10 ring-4 ring-primary/5">

@@ -6,15 +6,25 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, UserPlus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, UserPlus, UserCog, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { useCompany } from "../contexts/CompanyContext";
 import { settingsService } from "../services/settingsService";
+import { NovoUsuarioForm } from "@/modules/cadastros/components/NovoUsuarioForm";
+import { authService } from "@/modules/auth/services/authService";
+import { supabase } from "@/integrations/supabase/client";
+import { Label } from "@/components/ui/label";
 
 export default function UsersManager() {
   const { currentCompany, hasPermission } = useCompany();
   const qc = useQueryClient();
   const [busca, setBusca] = useState("");
+  const [novoOpen, setNovoOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<{ id: string; nome?: string; email?: string } | null>(null);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmaSenha, setConfirmaSenha] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
 
   const canManage = hasPermission("settings.users.manage");
 
@@ -52,14 +62,50 @@ export default function UsersManager() {
     } catch (e: any) { toast.error(e.message); }
   }
 
+  async function enviarResetSenha(email?: string | null, nome?: string | null) {
+    if (!email) { toast.error("Usuário sem e-mail cadastrado"); return; }
+    try {
+      const { error } = await authService.resetPassword(email);
+      if (error) throw error;
+      toast.success(`Link de redefinição enviado para ${nome ?? email}`);
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao enviar e-mail de redefinição");
+    }
+  }
+
+  async function definirNovaSenha() {
+    if (!resetTarget) return;
+    if (novaSenha.length < 8) { toast.error("Senha deve ter pelo menos 8 caracteres"); return; }
+    if (novaSenha !== confirmaSenha) { toast.error("Senhas não conferem"); return; }
+    setResetLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-reset-senha", {
+        body: { target_user_id: resetTarget.id, new_password: novaSenha },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Senha redefinida para ${resetTarget.nome ?? resetTarget.email ?? "usuário"}`);
+      setResetTarget(null); setNovaSenha(""); setConfirmaSenha("");
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao redefinir senha");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle className="text-base">Usuários da empresa</CardTitle>
         {canManage && (
-          <Button size="sm" onClick={() => toast.info("Convide o usuário pela tela de Cadastro. Após criar, ele será vinculado a esta empresa automaticamente.")}>
-            <UserPlus className="mr-2 h-4 w-4" /> Convidar
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setNovoOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" /> Cadastrar usuário
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => toast.info("Envie o link de cadastro ao usuário. Após criar a conta, ele será vinculado a esta empresa.")}>
+              <UserCog className="mr-2 h-4 w-4" /> Convidar
+            </Button>
+          </div>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
@@ -110,13 +156,29 @@ export default function UsersManager() {
                   </TableCell>
                   <TableCell className="text-right">
                     {canManage && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => alterarStatus(l.user_id, l.settings_users?.status === "active" ? "inactive" : "active")}
-                      >
-                        {l.settings_users?.status === "active" ? "Desativar" : "Reativar"}
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => enviarResetSenha(l.settings_users?.email, l.settings_users?.nome)}
+                        >
+                          <KeyRound className="mr-1 h-3.5 w-3.5" /> Esqueci a senha
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setResetTarget({ id: l.user_id, nome: l.settings_users?.nome, email: l.settings_users?.email })}
+                        >
+                          <KeyRound className="mr-1 h-3.5 w-3.5" /> Definir senha
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => alterarStatus(l.user_id, l.settings_users?.status === "active" ? "inactive" : "active")}
+                        >
+                          {l.settings_users?.status === "active" ? "Desativar" : "Reativar"}
+                        </Button>
+                      </div>
                     )}
                   </TableCell>
                 </TableRow>
@@ -125,6 +187,46 @@ export default function UsersManager() {
           </Table>
         )}
       </CardContent>
+      <Dialog open={novoOpen} onOpenChange={setNovoOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Cadastrar novo usuário</DialogTitle>
+          </DialogHeader>
+          <NovoUsuarioForm
+            onCreated={() => {
+              setNovoOpen(false);
+              qc.invalidateQueries({ queryKey: ["settings_company_users", currentCompany?.id] });
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!resetTarget} onOpenChange={(v) => { if (!v) { setResetTarget(null); setNovaSenha(""); setConfirmaSenha(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Definir nova senha</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Definir nova senha para <strong>{resetTarget?.nome ?? resetTarget?.email ?? "usuário"}</strong>.
+              O usuário deverá usar essa senha no próximo login.
+            </p>
+            <div>
+              <Label>Nova senha</Label>
+              <Input type="password" value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} minLength={8} />
+            </div>
+            <div>
+              <Label>Confirmar senha</Label>
+              <Input type="password" value={confirmaSenha} onChange={(e) => setConfirmaSenha(e.target.value)} minLength={8} />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setResetTarget(null)}>Cancelar</Button>
+              <Button onClick={definirNovaSenha} disabled={resetLoading}>
+                {resetLoading ? "Salvando..." : "Salvar nova senha"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

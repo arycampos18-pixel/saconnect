@@ -1,6 +1,7 @@
 import { Component, ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { authLog } from "@/modules/auth/utils/authLogger";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -15,6 +16,13 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: unknown) {
     // eslint-disable-next-line no-console
     console.error("[ErrorBoundary]", error, info);
+    try {
+      authLog("error", "error_boundary.caught", {
+        message: error?.message,
+        stack: error?.stack?.split("\n").slice(0, 5).join("\n"),
+        path: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
+    } catch { /* noop */ }
   }
 
   reset = () => this.setState({ error: null });

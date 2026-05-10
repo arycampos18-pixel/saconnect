@@ -74,8 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    // 2) sessão atual
-    supabase.auth.getSession().then(({ data, error }) => {
+     // 3) Timeout de segurança (evita white screen se o getSession/listener pendurar)
+     const safetyTimeout = setTimeout(() => {
+       if (!cancelled && !authReadyRef.current) {
+         authLog("warn", "auth.safety_timeout_triggered");
+         markAuthReady();
+       }
+     }, 1500);
+ 
+     // 2) sessão atual
+     supabase.auth.getSession().then(({ data, error }) => {
       if (error) {
         authLog("error", "getSession.error", { message: error.message });
       } else {
@@ -96,10 +104,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       markAuthReady();
     });
 
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
+     return () => {
+       cancelled = true;
+       clearTimeout(safetyTimeout);
+       subscription.unsubscribe();
+     };
   }, []);
 
   async function loadProfile(userId: string) {
@@ -130,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       profile,
       loading,
-      isAuthenticated: isSessionValid(session) && profile?.ativo !== false,
+   isAuthenticated: !!session && isSessionValid(session) && (profile === null || profile.ativo !== false),
     }),
     [session, profile, loading],
   );

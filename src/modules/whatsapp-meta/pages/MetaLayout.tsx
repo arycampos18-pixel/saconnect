@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { LayoutDashboard, Smartphone, FileText, Megaphone, Users, Plug } from "lucide-react";
+import { WhatsAppProviderTabs } from "@/modules/whatsapp/components/ProviderTabs";
 
 const tabs = [
   { to: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -12,11 +13,14 @@ const tabs = [
 
 export default function MetaLayout() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">WhatsApp Oficial (Meta)</h1>
-        <p className="text-sm text-muted-foreground">API oficial do WhatsApp Business — sessões, templates, campanhas e leads.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">WhatsApp</h1>
+        <p className="text-sm text-muted-foreground">
+          API oficial do WhatsApp Business — Meta Cloud API.
+        </p>
       </div>
+      <WhatsAppProviderTabs />
       <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
         {tabs.map((t) => (
           <NavLink

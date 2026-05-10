@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,11 +10,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { authService } from "@/modules/auth/services/authService";
 import { auditoriaService } from "@/modules/auditoria/services/auditoriaService";
 import { formatPhoneBR, isValidPhoneBR } from "@/shared/utils/phone";
-import { formatCPF, isValidCPF } from "@/shared/utils/cpf";
+import { isValidCPF } from "@/shared/utils/cpf";
+import { CpfInput } from "@/shared/components/CpfInput";
+import { useCompany } from "@/modules/settings/contexts/CompanyContext";
+import { settingsService } from "@/modules/settings/services/settingsService";
 
 type Role = "admin" | "lideranca" | "operador";
 
+function inferRoleFromProfileName(nome: string): Role {
+  const n = nome.toLowerCase();
+  if (n.includes("admin")) return "admin";
+  if (n.includes("lider") || n.includes("líder") || n.includes("gestor")) return "lideranca";
+  return "operador";
+}
+
 export function NovoUsuarioForm({ onCreated }: { onCreated?: () => void }) {
+  const { currentCompany } = useCompany();
+  const { data: perfis = [] } = useQuery({
+    queryKey: ["settings_profiles", currentCompany?.id],
+    queryFn: () => (currentCompany ? settingsService.listarPerfis(currentCompany.id) : []),
+    enabled: !!currentCompany,
+  });
+
   const [form, setForm] = useState({
     nome: "",
     email: "",
@@ -22,7 +40,7 @@ export function NovoUsuarioForm({ onCreated }: { onCreated?: () => void }) {
     cargo: "",
     senha: "",
     confirmar: "",
-    role: "operador" as Role,
+    profileId: "",
     observacoes: "",
   });
   const [loading, setLoading] = useState(false);
@@ -37,6 +55,7 @@ export function NovoUsuarioForm({ onCreated }: { onCreated?: () => void }) {
     if (form.telefone && !isValidPhoneBR(form.telefone)) return toast.error("Telefone inválido");
     if (form.senha.length < 8) return toast.error("Senha precisa de pelo menos 8 caracteres");
     if (form.senha !== form.confirmar) return toast.error("Senhas não conferem");
+    if (!form.profileId) return toast.error("Selecione um perfil de acesso");
 
     setLoading(true);
     try {
@@ -49,20 +68,33 @@ export function NovoUsuarioForm({ onCreated }: { onCreated?: () => void }) {
       });
       if (error) throw error;
       const newUserId = data.user?.id;
-      if (newUserId && form.role !== "operador") {
-        await supabase.from("user_roles").insert({ user_id: newUserId, role: form.role });
+      const perfilSelecionado = perfis.find((p) => p.id === form.profileId);
+      const role = perfilSelecionado ? inferRoleFromProfileName(perfilSelecionado.nome) : "operador";
+      if (newUserId) {
+        if (role !== "operador") {
+          await supabase.from("user_roles").insert({ user_id: newUserId, role });
+        }
+        if (currentCompany) {
+          await settingsService.vincularUsuarioEmpresa(newUserId, currentCompany.id, form.profileId);
+        }
+        // Auto-confirma o e-mail para liberar login imediato (cadastro feito por admin)
+        try {
+          await supabase.functions.invoke("admin-confirmar-email", {
+            body: { target_user_id: newUserId },
+          });
+        } catch { /* ignora — usuário pode confirmar pelo e-mail */ }
       }
       await auditoriaService.registrar({
         acao: "Criar",
         entidade: "usuario",
         entidade_id: newUserId,
-        descricao: `Novo usuário ${form.nome} (${form.email}) criado com perfil ${form.role}`,
+        descricao: `Novo usuário ${form.nome} (${form.email}) criado com perfil ${perfilSelecionado?.nome ?? "—"}`,
         modulo: "Cadastros",
       });
-      toast.success("Usuário criado. Um email de confirmação foi enviado.");
+      toast.success("Usuário criado e liberado para acesso imediato.");
       setForm({
         nome: "", email: "", telefone: "", cpf: "", cargo: "",
-        senha: "", confirmar: "", role: "operador", observacoes: "",
+        senha: "", confirmar: "", profileId: "", observacoes: "",
       });
       onCreated?.();
     } catch (err: any) {
@@ -86,10 +118,7 @@ export function NovoUsuarioForm({ onCreated }: { onCreated?: () => void }) {
         <Label>Telefone</Label>
         <Input value={form.telefone} onChange={(e) => update("telefone")(formatPhoneBR(e.target.value))} placeholder="(11) 99999-9999" />
       </div>
-      <div>
-        <Label>CPF</Label>
-        <Input value={form.cpf} onChange={(e) => update("cpf")(formatCPF(e.target.value))} placeholder="000.000.000-00" />
-      </div>
+      <CpfInput value={form.cpf} onChange={update("cpf")} />
       <div>
         <Label>Cargo / Função</Label>
         <Input value={form.cargo} onChange={(e) => update("cargo")(e.target.value)} placeholder="Ex: Assessor" />
@@ -104,14 +133,17 @@ export function NovoUsuarioForm({ onCreated }: { onCreated?: () => void }) {
       </div>
       <div className="md:col-span-2">
         <Label>Perfil de acesso *</Label>
-        <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+        <Select value={form.profileId} onValueChange={(v) => setForm((f) => ({ ...f, profileId: v }))}>
+          <SelectTrigger><SelectValue placeholder={perfis.length ? "Selecione um perfil" : "Nenhum perfil cadastrado"} /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="admin">Administrador</SelectItem>
-            <SelectItem value="lideranca">Liderança</SelectItem>
-            <SelectItem value="operador">Operador</SelectItem>
+            {perfis.map((p) => (
+              <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Os perfis disponíveis são definidos em <strong>Configurações → Perfis &amp; Permissões</strong>.
+        </p>
       </div>
       <div className="md:col-span-2">
         <Label>Observações</Label>

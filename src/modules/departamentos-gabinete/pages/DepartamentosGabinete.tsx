@@ -132,7 +132,7 @@ export default function DepartamentosGabinete() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button asChild size="icon" variant="ghost" title="Visualizar">
-                        <Link to={`/app/departamentos-gabinete/${d.id}`}><Eye className="h-4 w-4" /></Link>
+                        <Link to={`/app/political/departments/${d.id}`}><Eye className="h-4 w-4" /></Link>
                       </Button>
                       <Button size="icon" variant="ghost" title="Editar"
                         onClick={() => { setEditando(d); setOpenForm(true); }}>

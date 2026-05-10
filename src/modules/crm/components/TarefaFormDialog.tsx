@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { crmService } from "../services/crmService";
 import { supabase } from "@/integrations/supabase/client";
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
+import { useCatalogoCustomizado } from "@/shared/hooks/useCatalogoCustomizado";
 
 interface Props {
   open: boolean;
@@ -23,6 +25,7 @@ export function TarefaFormDialog({ open, onOpenChange, onSaved }: Props) {
   const [eleitorId, setEleitorId] = useState<string>("none");
   const [eleitores, setEleitores] = useState<{ id: string; nome: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const catPrioridade = useCatalogoCustomizado("crm_prioridade");
 
   useEffect(() => {
     if (open) {
@@ -64,14 +67,14 @@ export function TarefaFormDialog({ open, onOpenChange, onSaved }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Prioridade</Label>
-              <Select value={prioridade} onValueChange={(v: any) => setPrioridade(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Baixa">Baixa</SelectItem>
-                  <SelectItem value="Média">Média</SelectItem>
-                  <SelectItem value="Alta">Alta</SelectItem>
-                </SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="cat_crm_prioridade"
+                label="prioridade"
+                opcoes={catPrioridade.items}
+                value={catPrioridade.items.find((s) => s.nome === prioridade)?.id ?? null}
+                onChange={(id) => { const s = catPrioridade.items.find((x) => x.id === id); if (s) setPrioridade(s.nome as any); }}
+                onCreated={(item) => { catPrioridade.addLocal({ id: item.id, nome: item.nome }); setPrioridade(item.nome as any); }}
+              />
             </div>
             <div>
               <Label>Vencimento</Label>

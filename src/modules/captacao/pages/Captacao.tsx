@@ -17,8 +17,11 @@ import {
   catalogosService, type Lideranca, type Cabo, type Tag,
 } from "@/modules/eleitores/services/catalogosService";
 import { formatPhoneBR, isValidPhoneBR, onlyDigits } from "@/shared/utils/phone";
-import { formatCPF, isValidCPF, onlyDigitsCPF } from "@/shared/utils/cpf";
-import { buscarCep, formatCEP, onlyDigitsCEP } from "@/shared/utils/cep";
+import { isValidCPF, onlyDigitsCPF } from "@/shared/utils/cpf";
+import { CpfInput } from "@/shared/components/CpfInput";
+import { CepInput } from "@/shared/components/CepInput";
+import { useAuth } from "@/modules/auth/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const schema = z.object({
   nome: z.string().trim().min(2, "Nome obrigatório").max(120),
@@ -40,6 +43,7 @@ const schema = z.object({
   cidade: z.string().max(80).optional().or(z.literal("")),
   uf: z.string().max(2).optional().or(z.literal("")),
   observacoes: z.string().max(1000).optional().or(z.literal("")),
+  origem: z.string().max(80).optional().or(z.literal("")),
 });
 
 type Form = z.infer<typeof schema>;
@@ -47,21 +51,26 @@ type Form = z.infer<typeof schema>;
 const empty: Form = {
   nome: "", telefone: "", cpf: "", email: "", data_nascimento: "", genero: "",
   cep: "", rua: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "",
-  observacoes: "",
+  observacoes: "", origem: "Cadastro Manual",
 };
 
 export default function Captacao() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [form, setForm] = useState<Form>(empty);
   const [liderancaId, setLiderancaId] = useState<string>("");
   const [caboId, setCaboId] = useState<string>("");
+  const [vinculoTravado, setVinculoTravado] = useState<{ lideranca: boolean; cabo: boolean }>({
+    lideranca: false,
+    cabo: false,
+  });
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [consent, setConsent] = useState(false);
   const [liderancas, setLiderancas] = useState<Lideranca[]>([]);
   const [cabos, setCabos] = useState<Cabo[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [origens, setOrigens] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -69,7 +78,48 @@ export default function Captacao() {
       catalogosService.cabos(),
       catalogosService.tags(),
     ]).then(([l, c, t]) => { setLiderancas(l); setCabos(c); setTags(t); });
+    // origens distintas existentes (sem catálogo dedicado)
+    (supabase as any)
+      .from("eleitores")
+      .select("origem")
+      .not("origem", "is", null)
+      .limit(1000)
+      .then(({ data }: any) => {
+        const set = new Set<string>(["Cadastro Manual", "Auto-cadastro", "QR Code", "WhatsApp", "Importação"]);
+        (data ?? []).forEach((r: any) => { if (r.origem) set.add(r.origem); });
+        setOrigens(Array.from(set).sort());
+      });
   }, []);
+
+  // Pré-preenche e trava Liderança/Cabo de acordo com o cadastro do usuário logado.
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const sb: any = supabase;
+      // 1) É um cabo eleitoral? Então herda lideranca + cabo.
+      const { data: cabo } = await sb
+        .from("cabos_eleitorais")
+        .select("id, lideranca_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (cabo?.id) {
+        if (cabo.lideranca_id) setLiderancaId(cabo.lideranca_id);
+        setCaboId(cabo.id);
+        setVinculoTravado({ lideranca: !!cabo.lideranca_id, cabo: true });
+        return;
+      }
+      // 2) É uma liderança? Então herda apenas a liderança.
+      const { data: lid } = await sb
+        .from("liderancas")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (lid?.id) {
+        setLiderancaId(lid.id);
+        setVinculoTravado({ lideranca: true, cabo: false });
+      }
+    })();
+  }, [user]);
 
   const cabosFiltrados = cabos.filter((c) => !liderancaId || c.lideranca_id === liderancaId);
   const upd = (k: keyof Form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -77,29 +127,6 @@ export default function Captacao() {
 
   const updTelefone = (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, telefone: formatPhoneBR(e.target.value) }));
-  const updCpf = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm((f) => ({ ...f, cpf: formatCPF(e.target.value) }));
-  const updCep = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = formatCEP(e.target.value);
-    setForm((f) => ({ ...f, cep: v }));
-    if (onlyDigitsCEP(v).length === 8) {
-      setCepLoading(true);
-      const data = await buscarCep(v);
-      setCepLoading(false);
-      if (!data) {
-        toast.error("CEP não encontrado");
-        return;
-      }
-      setForm((f) => ({
-        ...f,
-        rua: data.logradouro || f.rua,
-        bairro: data.bairro || f.bairro,
-        cidade: data.localidade || f.cidade,
-        uf: data.uf || f.uf,
-      }));
-      toast.success("Endereço preenchido pelo CEP");
-    }
-  };
 
   const toggleTag = (id: string) =>
     setTagIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
@@ -151,7 +178,7 @@ export default function Captacao() {
         consentimento_lgpd: consent,
         lideranca_id: liderancaId || null,
         cabo_id: caboId || null,
-        origem: "Cadastro Manual",
+        origem: d.origem || "Cadastro Manual",
         tag_ids: tagIds,
       });
       toast.success("Eleitor cadastrado com sucesso!");
@@ -196,8 +223,7 @@ export default function Captacao() {
               <Input id="telefone" value={form.telefone} onChange={updTelefone} placeholder="(11) 99999-9999" inputMode="tel" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="cpf">CPF</Label>
-              <Input id="cpf" value={form.cpf} onChange={updCpf} placeholder="000.000.000-00" inputMode="numeric" />
+              <CpfInput value={form.cpf} onChange={(v) => setForm((f) => ({ ...f, cpf: v }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
@@ -219,6 +245,18 @@ export default function Captacao() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="origem">Origem do cadastro</Label>
+              <Select
+                value={form.origem || "Cadastro Manual"}
+                onValueChange={(v) => setForm((f) => ({ ...f, origem: v }))}
+              >
+                <SelectTrigger id="origem"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {origens.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </section>
 
@@ -228,13 +266,19 @@ export default function Captacao() {
           </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
             <div className="md:col-span-2 space-y-2">
-              <Label htmlFor="cep">CEP</Label>
-              <div className="relative">
-                <Input id="cep" value={form.cep} onChange={updCep} placeholder="00000-000" inputMode="numeric" />
-                {cepLoading && (
-                  <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                )}
-              </div>
+              <CepInput
+                value={form.cep}
+                onChange={(cep) => setForm((f) => ({ ...f, cep }))}
+                onAddressFound={(addr) =>
+                  setForm((f) => ({
+                    ...f,
+                    rua: addr.rua,
+                    bairro: addr.bairro,
+                    cidade: addr.cidade,
+                    uf: addr.uf,
+                  }))
+                }
+              />
             </div>
             <div className="md:col-span-3 space-y-2">
               <Label htmlFor="rua">Rua</Label>
@@ -270,7 +314,11 @@ export default function Captacao() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Liderança</Label>
-              <Select value={liderancaId} onValueChange={(v) => { setLiderancaId(v); setCaboId(""); }}>
+              <Select
+                value={liderancaId}
+                onValueChange={(v) => { setLiderancaId(v); setCaboId(""); }}
+                disabled={vinculoTravado.lideranca}
+              >
                 <SelectTrigger><SelectValue placeholder="Selecione a liderança" /></SelectTrigger>
                 <SelectContent>
                   {liderancas.map((l) => (
@@ -278,10 +326,17 @@ export default function Captacao() {
                   ))}
                 </SelectContent>
               </Select>
+              {vinculoTravado.lideranca && (
+                <p className="text-xs text-muted-foreground">Vínculo herdado do seu cadastro.</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Cabo eleitoral</Label>
-              <Select value={caboId} onValueChange={setCaboId} disabled={!liderancaId}>
+              <Select
+                value={caboId}
+                onValueChange={setCaboId}
+                disabled={vinculoTravado.cabo || !liderancaId}
+              >
                 <SelectTrigger><SelectValue placeholder={liderancaId ? "Selecione o cabo" : "Escolha uma liderança"} /></SelectTrigger>
                 <SelectContent>
                   {cabosFiltrados.map((c) => (
@@ -289,6 +344,9 @@ export default function Captacao() {
                   ))}
                 </SelectContent>
               </Select>
+              {vinculoTravado.cabo && (
+                <p className="text-xs text-muted-foreground">Vínculo herdado do seu cadastro.</p>
+              )}
             </div>
             <div className="md:col-span-2 space-y-2">
               <Label>Tags</Label>

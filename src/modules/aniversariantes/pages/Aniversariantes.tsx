@@ -9,6 +9,9 @@ import { aniversariantesService, type Aniversariante } from "../services/anivers
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
 
 const MENSAGEM_PADRAO = (nome: string) =>
   `Olá, ${nome}! 🎉 Hoje é seu aniversário e queremos te desejar um dia muito feliz, repleto de saúde, alegria e realizações. Conte sempre com nosso mandato!`;
@@ -21,6 +24,9 @@ export default function Aniversariantes() {
   const [cfg, setCfg] = useState<{ ativo: boolean; template: string; apenas_lgpd: boolean } | null>(null);
   const [savingCfg, setSavingCfg] = useState(false);
   const [disparando, setDisparando] = useState(false);
+  const [alvo, setAlvo] = useState<Aniversariante | null>(null);
+  const [msgEnvio, setMsgEnvio] = useState("");
+  const [enviandoFelicitacao, setEnviandoFelicitacao] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -68,9 +74,33 @@ export default function Aniversariantes() {
   function abrirWhatsApp(a: Aniversariante) {
     const tel = a.telefone.replace(/\D/g, "");
     if (!tel) { toast.error("Telefone inválido."); return; }
-    const numeroBR = tel.startsWith("55") ? tel : `55${tel}`;
-    const msg = encodeURIComponent(MENSAGEM_PADRAO(a.nome.split(" ")[0]));
-    window.open(`https://wa.me/${numeroBR}?text=${msg}`, "_blank");
+    const primeiroNome = a.nome.split(" ")[0];
+    const template = cfg?.template?.trim();
+    const corpo = template
+      ? template.replace(/\{nome\}/gi, primeiroNome)
+      : MENSAGEM_PADRAO(primeiroNome);
+    setAlvo(a);
+    setMsgEnvio(corpo);
+  }
+
+  async function enviarFelicitacaoZapi() {
+    if (!alvo) return;
+    if (!msgEnvio.trim()) { toast.error("Mensagem vazia."); return; }
+    setEnviandoFelicitacao(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-whatsapp-zapi", {
+        body: { to: alvo.telefone, message: msgEnvio, nome: alvo.nome },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Mensagem enviada para ${alvo.nome.split(" ")[0]} via Z-API.`);
+      setAlvo(null);
+      setMsgEnvio("");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao enviar pela Z-API.");
+    } finally {
+      setEnviandoFelicitacao(false);
+    }
   }
 
   return (
@@ -194,6 +224,42 @@ export default function Aniversariantes() {
           })}
         </ul>
       )}
+
+      <Dialog open={!!alvo} onOpenChange={(open) => { if (!open) { setAlvo(null); setMsgEnvio(""); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Cake className="h-5 w-5 text-primary" /> Felicitar {alvo?.nome}
+            </DialogTitle>
+            <DialogDescription>
+              A mensagem será enviada pela instância Z-API conectada à sua conta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-sm text-muted-foreground flex items-center gap-2">
+              <Phone className="h-4 w-4" /> {alvo?.telefone}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="msg-felicitar">Mensagem</Label>
+              <Textarea
+                id="msg-felicitar"
+                value={msgEnvio}
+                onChange={(e) => setMsgEnvio(e.target.value)}
+                rows={5}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAlvo(null); setMsgEnvio(""); }} disabled={enviandoFelicitacao}>
+              Cancelar
+            </Button>
+            <Button onClick={enviarFelicitacaoZapi} disabled={enviandoFelicitacao}>
+              {enviandoFelicitacao ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Enviar pela Z-API
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

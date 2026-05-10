@@ -1,0 +1,1 @@
+DELETE FROM public.settings_permissions WHERE id IN ('settings.integracoes.manage','settings.integracoes.view','settings.webhooks.manage','settings.webhooks.view');

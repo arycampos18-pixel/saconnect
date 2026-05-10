@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { toast } from "sonner";
 import { roteamentoService, type RegraRoteamento } from "../services/roteamentoService";
 import { departamentoService } from "../services/departamentoService";
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
 
 type Form = { id?: string; nome: string; palavras: string; departamento_id: string; prioridade: number; ativo: boolean };
 const VAZIO: Form = { nome: "", palavras: "", departamento_id: "", prioridade: 0, ativo: true };
@@ -25,7 +26,7 @@ export default function Roteamento() {
   const { data: regras = [], isLoading } = useQuery({
     queryKey: ["roteamento-regras"], queryFn: () => roteamentoService.listar(),
   });
-  const { data: departamentos = [] } = useQuery({
+  const { data: departamentos = [], refetch: refetchDeps } = useQuery({
     queryKey: ["departamentos-list"], queryFn: () => departamentoService.listarTodos(),
   });
 
@@ -114,14 +115,15 @@ export default function Roteamento() {
               </div>
               <div>
                 <Label>Departamento de destino</Label>
-                <Select value={form.departamento_id} onValueChange={(v) => setForm({ ...form, departamento_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {departamentos.filter((d) => d.ativo).map((d) => (
-                      <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <DropdownComNovoCadastro
+                  campo="departamentos"
+                  label="departamento"
+                  opcoes={departamentos.filter((d) => d.ativo).map((d) => ({ id: d.id, nome: d.nome }))}
+                  value={form.departamento_id || null}
+                  onChange={(v) => setForm({ ...form, departamento_id: v ?? "" })}
+                  placeholder="Selecione"
+                  onCreated={(item) => { setForm((f) => ({ ...f, departamento_id: item.id })); refetchDeps(); }}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

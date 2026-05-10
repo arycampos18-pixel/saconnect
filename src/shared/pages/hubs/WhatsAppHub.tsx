@@ -35,7 +35,7 @@ const ZAPI_SUBS: HubSubmodule[] = [
 ];
 
 const META_SUBS: HubSubmodule[] = [
-  { to: "/app/wa-meta/dashboard", title: "Dashboard", description: "Visão geral oficial", icon: LayoutDashboard },
+   { to: "/app/wa-meta/dashboard", title: "Painel", description: "Visão geral oficial", icon: LayoutDashboard },
   { to: "/app/wa-meta/connect", title: "Conexão", description: "Configurar credenciais e OAuth", icon: Plug },
   { to: "/app/wa-meta/sessions", title: "Sessões", description: "Números conectados", icon: Smartphone },
   { to: "/app/wa-meta/templates", title: "Templates", description: "Aprovados pela Meta", icon: FileText },

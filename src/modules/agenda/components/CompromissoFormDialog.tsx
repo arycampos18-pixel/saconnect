@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -11,10 +10,8 @@ import {
   agendaService, type Compromisso, type CompromissoCategoria,
   type CompromissoPrioridade, type CompromissoStatus,
 } from "../services/agendaService";
-
-const CATEGORIAS: CompromissoCategoria[] = ["Reunião", "Visita", "Evento", "Audiência", "Outro"];
-const PRIORIDADES: CompromissoPrioridade[] = ["Baixa", "Média", "Alta"];
-const STATUS: CompromissoStatus[] = ["Agendado", "Concluído", "Cancelado"];
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
+import { useCatalogoCustomizado } from "@/shared/hooks/useCatalogoCustomizado";
 
 function toLocalInput(iso: string): string {
   const d = new Date(iso);
@@ -41,6 +38,9 @@ export function CompromissoFormDialog({
   const [status, setStatus] = useState<CompromissoStatus>("Agendado");
   const [lembrete, setLembrete] = useState(30);
   const [saving, setSaving] = useState(false);
+  const catCategoria = useCatalogoCustomizado("compromisso_categoria");
+  const catPrioridade = useCatalogoCustomizado("compromisso_prioridade");
+  const catStatus = useCatalogoCustomizado("compromisso_status");
 
   useEffect(() => {
     if (!open) return;
@@ -117,24 +117,36 @@ export function CompromissoFormDialog({
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label className="text-xs">Categoria</Label>
-              <Select value={categoria} onValueChange={(v) => setCategoria(v as CompromissoCategoria)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{CATEGORIAS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="cat_compromisso_categoria"
+                label="categoria"
+                opcoes={catCategoria.items}
+                value={catCategoria.items.find((s) => s.nome === categoria)?.id ?? null}
+                onChange={(id) => { const s = catCategoria.items.find((x) => x.id === id); if (s) setCategoria(s.nome as CompromissoCategoria); }}
+                onCreated={(item) => { catCategoria.addLocal({ id: item.id, nome: item.nome }); setCategoria(item.nome as CompromissoCategoria); }}
+              />
             </div>
             <div>
               <Label className="text-xs">Prioridade</Label>
-              <Select value={prioridade} onValueChange={(v) => setPrioridade(v as CompromissoPrioridade)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{PRIORIDADES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="cat_compromisso_prioridade"
+                label="prioridade"
+                opcoes={catPrioridade.items}
+                value={catPrioridade.items.find((s) => s.nome === prioridade)?.id ?? null}
+                onChange={(id) => { const s = catPrioridade.items.find((x) => x.id === id); if (s) setPrioridade(s.nome as CompromissoPrioridade); }}
+                onCreated={(item) => { catPrioridade.addLocal({ id: item.id, nome: item.nome }); setPrioridade(item.nome as CompromissoPrioridade); }}
+              />
             </div>
             <div>
               <Label className="text-xs">Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as CompromissoStatus)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{STATUS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="cat_compromisso_status"
+                label="status"
+                opcoes={catStatus.items}
+                value={catStatus.items.find((s) => s.nome === status)?.id ?? null}
+                onChange={(id) => { const s = catStatus.items.find((x) => x.id === id); if (s) setStatus(s.nome as CompromissoStatus); }}
+                onCreated={(item) => { catStatus.addLocal({ id: item.id, nome: item.nome }); setStatus(item.nome as CompromissoStatus); }}
+              />
             </div>
           </div>
           <div>

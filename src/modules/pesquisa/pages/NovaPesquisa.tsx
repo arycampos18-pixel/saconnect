@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import {
   pesquisaService, type PerguntaInput, type PerguntaTipo, type PesquisaStatus, type PesquisaTipo,
 } from "../services/pesquisaService";
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
+import { useCatalogoCustomizado } from "@/shared/hooks/useCatalogoCustomizado";
 
 type Linha = { texto: string; tipo: PerguntaTipo; opcoes: string[] };
 
@@ -28,6 +30,7 @@ export default function NovaPesquisa() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusAtual, setStatusAtual] = useState<PesquisaStatus>("Rascunho");
+  const catTipos = useCatalogoCustomizado("pesquisa_tipo");
 
   useEffect(() => {
     if (!id) return;
@@ -129,10 +132,14 @@ export default function NovaPesquisa() {
         </div>
         <div>
           <Label>Tipo *</Label>
-          <Select value={tipo} onValueChange={(v) => setTipo(v as PesquisaTipo)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{TIPOS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
+          <DropdownComNovoCadastro
+            campo="cat_pesquisa_tipo"
+            label="tipo"
+            opcoes={catTipos.items}
+            value={catTipos.items.find((s) => s.nome === tipo)?.id ?? null}
+            onChange={(id) => { const s = catTipos.items.find((x) => x.id === id); if (s) setTipo(s.nome as PesquisaTipo); }}
+            onCreated={(item) => { catTipos.addLocal({ id: item.id, nome: item.nome }); setTipo(item.nome as PesquisaTipo); }}
+          />
         </div>
       </div>
 

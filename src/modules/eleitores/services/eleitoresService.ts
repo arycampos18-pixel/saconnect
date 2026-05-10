@@ -20,11 +20,15 @@ export type Eleitor = {
   origem: string;
   observacoes: string | null;
   consentimento_lgpd: boolean;
-  lideranca_id: string | null;
-  cabo_id: string | null;
+   lideranca_id: string | null;
+   cabo_eleitoral_id: string | null;
+   score_fidelidade: number;
+   ultima_interacao: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  whatsapp_bloqueado?: boolean;
+  whatsapp_origem?: string | null;
 };
 
 export type EleitorComRelacoes = Eleitor & {
@@ -60,6 +64,7 @@ export type Filtros = {
   bairro?: string;
   tagId?: string;
   liderancaId?: string;
+  caboId?: string;
 };
 
 export const eleitoresService = {
@@ -67,7 +72,7 @@ export const eleitoresService = {
     let query = supabase
       .from("eleitores")
       .select(
-        "*, lideranca:liderancas(id, nome), cabo:cabos_eleitorais(id, nome), eleitor_tags(tag:tags(id, nome, cor))"
+        "*, lideranca:liderancas!eleitores_lideranca_id_fkey(id, nome), cabo:cabos_eleitorais!eleitores_cabo_eleitoral_id_fkey(id, nome), eleitor_tags(tag:tags(id, nome, cor))"
       )
       .order("created_at", { ascending: false })
       .limit(1000);
@@ -75,6 +80,8 @@ export const eleitoresService = {
     if (filtros.bairro && filtros.bairro !== "todos") query = query.eq("bairro", filtros.bairro);
     if (filtros.liderancaId && filtros.liderancaId !== "todas")
       query = query.eq("lideranca_id", filtros.liderancaId);
+    if (filtros.caboId && filtros.caboId !== "todos")
+      query = query.eq("cabo_eleitoral_id", filtros.caboId);
     if (filtros.search) {
       const s = filtros.search.replace(/[%_]/g, "");
       query = query.or(`nome.ilike.%${s}%,telefone.ilike.%${s}%,cpf.ilike.%${s}%`);
@@ -129,6 +136,16 @@ export const eleitoresService = {
 
   async remove(id: string): Promise<void> {
     const { error } = await supabase.from("eleitores").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  async updateTelefone(id: string, telefone: string): Promise<void> {
+    const tel = onlyDigits(telefone);
+    if (tel.length < 10) throw new Error("Telefone inválido");
+    const { error } = await supabase
+      .from("eleitores")
+      .update({ telefone: tel })
+      .eq("id", id);
     if (error) throw error;
   },
 

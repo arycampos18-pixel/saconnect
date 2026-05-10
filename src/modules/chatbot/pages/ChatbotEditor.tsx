@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { chatbotService, type ChatbotNo, type FluxoNoTipo, type OpcaoMenu } from "../services/chatbotService";
@@ -273,14 +274,16 @@ function EditorNo({
             {form.tipo === "encaminhar" && (
               <div>
                 <Label>Departamento</Label>
-                <Select value={form.departamento_id ?? "__none__"}
-                  onValueChange={(v) => setForm({ ...form, departamento_id: v === "__none__" ? null : v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— qualquer atendente —</SelectItem>
-                    {departamentos.map((d) => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <DropdownComNovoCadastro
+                  campo="departamentos"
+                  label="departamento"
+                  opcoes={departamentos.map((d: any) => ({ id: d.id, nome: d.nome }))}
+                  value={form.departamento_id ?? null}
+                  onChange={(v) => setForm({ ...form, departamento_id: v })}
+                  emptyOptionLabel="— qualquer atendente —"
+                  placeholder="Selecione"
+                  onCreated={(item) => setForm((f) => ({ ...f, departamento_id: item.id }))}
+                />
               </div>
             )}
             {form.tipo !== "encaminhar" && form.tipo !== "menu" && (

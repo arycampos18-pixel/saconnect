@@ -39,41 +39,95 @@ Deno.serve(async (req: Request) => {
   if (req.method === "POST") {
     try {
       const body = await req.json();
-      const entry = body?.entry?.[0];
-      const change = entry?.changes?.[0];
-      const value = change?.value;
-      const messages = value?.messages;
-      if (!messages || messages.length === 0) {
-        return new Response("OK", { status: 200 });
+      
+      let companyId: string;
+      let sessionId: string;
+      let senderPhone: string;
+      let senderName: string;
+      let messageText: string;
+      let messageExternalId: string;
+      let direction: "inbound" | "outbound" = "inbound";
+      let type: string = "text";
+
+      // 1. Identificar Provedor (Z-API vs META)
+      if (body.instanceId) {
+        // --- PROVEDOR Z-API ---
+        const { data: session } = await (supabase as any)
+          .from("whatsapp_sessions")
+          .select("id, company_id")
+          .eq("provider", "zapi")
+          .contains("credentials", { instance_id: body.instanceId })
+          .maybeSingle();
+
+        if (!session) return new Response("OK"); // Ignora se não encontrar sessão
+
+        companyId = session.company_id;
+        sessionId = session.id;
+        senderPhone = body.phone;
+        senderName = body.senderName || body.chatName || senderPhone;
+        messageExternalId = body.messageId;
+        direction = body.fromMe ? "outbound" : "inbound";
+
+        if (body.text) {
+          messageText = body.text.message;
+          type = "text";
+        } else if (body.image) {
+          messageText = body.image.caption || "[Imagem]";
+          type = "image";
+        } else if (body.audio) {
+          messageText = "[Áudio]";
+          type = "audio";
+        } else if (body.video) {
+          messageText = body.video.caption || "[Vídeo]";
+          type = "video";
+        } else if (body.document) {
+          messageText = body.document.fileName || "[Documento]";
+          type = "document";
+        } else {
+          messageText = `[${body.type || "unknown"}]`;
+          type = "other";
+        }
+      } else {
+        // --- PROVEDOR META ---
+        const entry = body?.entry?.[0];
+        const change = entry?.changes?.[0];
+        const value = change?.value;
+        const messages = value?.messages;
+        if (!messages || messages.length === 0) return new Response("OK");
+
+        const msg = messages[0];
+        const contact = value?.contacts?.[0];
+        const phoneNumberId = value?.metadata?.phone_number_id;
+        
+        const { data: session } = await (supabase as any)
+          .from("whatsapp_sessions")
+          .select("id, company_id")
+          .eq("provider", "meta")
+          .contains("credentials", { phone_number_id: phoneNumberId })
+          .maybeSingle();
+
+        if (!session) return new Response("OK");
+
+        companyId = session.company_id;
+        sessionId = session.id;
+        senderPhone = String(msg.from);
+        senderName = contact?.profile?.name ?? senderPhone;
+        messageExternalId = msg.id;
+        direction = "inbound";
+        type = msg.type || "text";
+        messageText = type === "text" ? msg.text?.body ?? "" : `[${type}]`;
       }
 
-      const msg = messages[0];
-      const contact = value?.contacts?.[0];
-      const phoneNumberId = value?.metadata?.phone_number_id;
-      if (msg.from === phoneNumberId) return new Response("OK");
+      if (!senderPhone || !messageText) return new Response("OK");
 
-      const { data: session } = await supabase
-        .from("whatsapp_sessions")
-        .select("id, company_id")
-        .eq("provider", "meta")
-        .contains("credentials", { phone_number_id: phoneNumberId })
-        .maybeSingle();
-      if (!session) return new Response("OK");
-
-      const companyId = session.company_id;
-      const sessionId = session.id;
-      const senderPhone = String(msg.from);
-      const senderName = contact?.profile?.name ?? senderPhone;
-      const messageText =
-        msg.type === "text" ? msg.text?.body ?? "" : `[${msg.type}]`;
-
-      // 1) Contato
+      // 2. Sincronizar Contato
       let { data: waContact } = await supabase
         .from("whatsapp_contacts")
         .select("id")
         .eq("company_id", companyId)
         .eq("phone", senderPhone)
         .maybeSingle();
+
       if (!waContact) {
         const { data: created } = await supabase
           .from("whatsapp_contacts")
@@ -82,7 +136,7 @@ Deno.serve(async (req: Request) => {
         waContact = created;
       }
 
-      // 2) Conversa
+      // 3. Sincronizar Conversa
       let { data: conversation } = await supabase
         .from("whatsapp_conversations")
         .select("id")
@@ -90,6 +144,7 @@ Deno.serve(async (req: Request) => {
         .eq("session_id", sessionId)
         .eq("contact_id", waContact!.id)
         .maybeSingle();
+
       if (!conversation) {
         const { data: created } = await supabase
           .from("whatsapp_conversations")
@@ -106,17 +161,21 @@ Deno.serve(async (req: Request) => {
       } else {
         await supabase
           .from("whatsapp_conversations")
-          .update({ last_message: messageText, last_message_at: new Date().toISOString() })
+          .update({ 
+            last_message: messageText, 
+            last_message_at: new Date().toISOString(),
+            status: "open" // Reabre se estiver fechada
+          })
           .eq("id", conversation.id);
       }
 
-      // 3) Mensagem
+      // 4. Inserir Mensagem
       await supabase.from("whatsapp_messages").insert({
         company_id: companyId,
         conversation_id: conversation!.id,
-        message_id_external: msg.id,
-        direction: "inbound",
-        type: msg.type ?? "text",
+        message_id_external: messageExternalId,
+        direction: direction,
+        type: type,
         content: messageText,
         status: "delivered",
       });

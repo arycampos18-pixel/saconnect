@@ -31,6 +31,7 @@ export default function DepartamentoDetalhe() {
   const departamentos = useDepStore((s) => s.departamentos);
   const membrosAll = useDepStore((s) => s.membros);
   const interacoesAll = useDepStore((s) => s.interacoes);
+  const loaded = useDepStore((s) => s.loaded);
 
   const departamento = useMemo(
     () => departamentos.find((d) => d.id === id),
@@ -73,7 +74,10 @@ export default function DepartamentoDetalhe() {
     [interacoes, tipoF],
   );
 
-  if (!departamento) return <Navigate to="/app/departamentos-gabinete" replace />;
+  if (!loaded) {
+    return <div className="container max-w-7xl p-6 text-sm text-muted-foreground">Carregando...</div>;
+  }
+  if (!departamento) return <Navigate to="/app/analise-de-eleitores/departamentos" replace />;
 
   const totalMembros = depStore.totalMembros(departamento.id);
   const ativos = membros.filter((m) => m.status === "Ativo").length;
@@ -82,15 +86,19 @@ export default function DepartamentoDetalhe() {
   ).length;
   const engaj = totalMembros > 0 ? Math.round((ativos / Math.max(totalMembros, ativos || 1)) * 1000) / 10 : 0;
 
-  // gráfico evolução (mock 6 meses)
-  const evolucao = [
-    { mes: "Dez", total: Math.max(0, totalMembros - 12) },
-    { mes: "Jan", total: Math.max(0, totalMembros - 9) },
-    { mes: "Fev", total: Math.max(0, totalMembros - 6) },
-    { mes: "Mar", total: Math.max(0, totalMembros - 4) },
-    { mes: "Abr", total: Math.max(0, totalMembros - 2) },
-    { mes: "Mai", total: totalMembros },
-  ];
+  // gráfico evolução real: acumulado de membros nos últimos 6 meses
+  const evolucao = (() => {
+    const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    const hoje = new Date();
+    const pontos: { mes: string; total: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const ref = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const limite = new Date(ref.getFullYear(), ref.getMonth() + 1, 1);
+      const total = membros.filter((m) => new Date(m.entradaEm) < limite).length;
+      pontos.push({ mes: meses[ref.getMonth()], total });
+    }
+    return pontos;
+  })();
   const tipos = ["Contato", "Atendimento", "Evento", "Doação"];
   const cores = ["hsl(var(--primary))", "hsl(var(--accent-foreground))", "hsl(var(--muted-foreground))", "hsl(var(--destructive))"];
   const pizza = tipos.map((t) => ({ name: t, value: interacoes.filter((i) => i.tipo === t).length || 1 }));
@@ -100,7 +108,7 @@ export default function DepartamentoDetalhe() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Button asChild size="icon" variant="ghost">
-            <Link to="/app/departamentos-gabinete"><ArrowLeft className="h-4 w-4" /></Link>
+            <Link to="/app/analise-de-eleitores/departamentos"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 text-primary">

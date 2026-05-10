@@ -7,10 +7,11 @@ export interface WhatsAppStatus {
   credentialsError?: string | null;
 }
 
-async function callZapi(action: "status" | "disconnect" | "restart") {
+async function callZapi(action: string, extra: Record<string, string> = {}) {
   const { data: session } = await supabase.auth.getSession();
   const token = session.session?.access_token;
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zapi-status?action=${action}`;
+  const qs = new URLSearchParams({ action, ...extra }).toString();
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zapi-status?${qs}`;
   const resp = await fetch(url, {
     method: "GET",
     headers: {
@@ -24,9 +25,46 @@ async function callZapi(action: "status" | "disconnect" | "restart") {
 }
 
 export const whatsappService = {
+  async _callInstance(action: string, payload: any = {}) {
+    const { data: session } = await supabase.auth.getSession();
+    const token = session.session?.access_token;
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zapi-instance`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ action, payload }),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(json?.error || `Falha Z-API Instance (${resp.status})`);
+    return json.data;
+  },
+
   status: (): Promise<WhatsAppStatus> => callZapi("status") as Promise<WhatsAppStatus>,
+  // Novas funções Z-API
+  getQueue: () => whatsappService._callInstance("get-queue"),
+  deleteQueue: () => whatsappService._callInstance("delete-queue"),
+  deleteQueueId: (messageId: string) => whatsappService._callInstance("delete-queue-id", { messageId }),
+  updateQueueSettings: (value: boolean) => whatsappService._callInstance("update-queue-settings", { value }),
+  
+  getCallToken: () => whatsappService._callInstance("get-call-token"),
+  getSipInfo: () => whatsappService._callInstance("get-sip-info"),
+  sendCall: (phone: string) => whatsappService._callInstance("send-call", { phone }),
+
+  sendTextStatus: (text: string, backgroundColor?: string) => whatsappService._callInstance("send-text-status", { text, backgroundColor }),
+  sendImageStatus: (image: string, caption?: string) => whatsappService._callInstance("send-image-status", { image, caption }),
+
   disconnect: () => callZapi("disconnect"),
   restart: () => callZapi("restart"),
+  device: () => callZapi("device"),
+  me: () => callZapi("me"),
+  qrCode: () => callZapi("qr-code"),
+  qrCodeImage: () => callZapi("qr-code-image"),
+  phoneCode: (phone: string) => callZapi("phone-code", { phone }),
+  rename: (name: string) => callZapi("rename", { name }),
 
   async metricas() {
     const { data } = await supabase

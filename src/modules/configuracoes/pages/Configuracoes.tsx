@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Settings, Save, Loader2, Palette, Vote, Shield, Sliders } from "lucide-react";
+import { Settings, Save, Loader2, Palette, Vote, Shield, Sliders, Plug, Users, Building2, Ticket, Database, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,9 +12,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { configService, type SistemaConfig } from "../services/configService";
 import { toast } from "sonner";
 import { useUserRole } from "@/modules/auth/hooks/useUserRole";
+import CentralIntegracoes from "./CentralIntegracoes";
+
+const UsersManager = lazy(() => import("@/modules/settings/pages/UsersManager"));
+const DepartamentosGabinete = lazy(() => import("@/modules/departamentos-gabinete/pages/DepartamentosGabinete"));
+const TicketsSettings = lazy(() => import("@/modules/tickets/pages/TicketsSettings"));
+const Backup = lazy(() => import("@/modules/backup/pages/Backup"));
+const PermissoesCadastroPanel = lazy(() => import("../components/PermissoesCadastroPanel"));
+
+const TabFallback = () => (
+  <div className="flex items-center justify-center py-16 text-muted-foreground">
+    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Carregando...
+  </div>
+);
 
 export default function Configuracoes() {
   const { isAdmin } = useUserRole();
+  const [params] = useSearchParams();
+  const initialTab = params.get("tab") || "branding";
   const { data, refetch } = useQuery({ queryKey: ["sistema_config"], queryFn: () => configService.obter() });
   const [form, setForm] = useState<Partial<SistemaConfig>>({});
   const [saving, setSaving] = useState(false);
@@ -57,12 +73,18 @@ export default function Configuracoes() {
         </Button>
       </div>
 
-      <Tabs defaultValue="branding">
-        <TabsList>
-          <TabsTrigger value="branding"><Palette className="mr-2 h-4 w-4" />Branding</TabsTrigger>
+      <Tabs defaultValue={initialTab}>
+        <TabsList className="flex h-auto flex-wrap gap-1">
+          <TabsTrigger value="branding"><Palette className="mr-2 h-4 w-4" />Geral</TabsTrigger>
           <TabsTrigger value="eleitoral"><Vote className="mr-2 h-4 w-4" />Eleitoral</TabsTrigger>
           <TabsTrigger value="lgpd"><Shield className="mr-2 h-4 w-4" />LGPD</TabsTrigger>
           <TabsTrigger value="limites"><Sliders className="mr-2 h-4 w-4" />Limites</TabsTrigger>
+          <TabsTrigger value="usuarios"><Users className="mr-2 h-4 w-4" />Usuários</TabsTrigger>
+          <TabsTrigger value="departamentos"><Building2 className="mr-2 h-4 w-4" />Departamentos</TabsTrigger>
+          <TabsTrigger value="integracoes"><Plug className="mr-2 h-4 w-4" />Integrações</TabsTrigger>
+          <TabsTrigger value="tickets"><Ticket className="mr-2 h-4 w-4" />Tickets</TabsTrigger>
+          <TabsTrigger value="backup"><Database className="mr-2 h-4 w-4" />Backup</TabsTrigger>
+          <TabsTrigger value="permissoes-cadastro"><ShieldCheck className="mr-2 h-4 w-4" />Permissões de cadastro</TabsTrigger>
         </TabsList>
 
         <TabsContent value="branding">
@@ -143,6 +165,30 @@ export default function Configuracoes() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="integracoes">
+          <CentralIntegracoes />
+        </TabsContent>
+
+        <TabsContent value="usuarios">
+          <Suspense fallback={<TabFallback />}><UsersManager /></Suspense>
+        </TabsContent>
+
+        <TabsContent value="departamentos">
+          <Suspense fallback={<TabFallback />}><DepartamentosGabinete /></Suspense>
+        </TabsContent>
+
+        <TabsContent value="tickets">
+          <Suspense fallback={<TabFallback />}><TicketsSettings /></Suspense>
+        </TabsContent>
+
+        <TabsContent value="backup">
+          <Suspense fallback={<TabFallback />}><Backup /></Suspense>
+        </TabsContent>
+
+        <TabsContent value="permissoes-cadastro">
+          <Suspense fallback={<TabFallback />}><PermissoesCadastroPanel /></Suspense>
         </TabsContent>
       </Tabs>
     </div>

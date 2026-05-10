@@ -102,16 +102,16 @@ export default function Historico() {
           </Select>
         </div>
 
-        <div className="rounded-md border">
-          <Table>
+        <div className="rounded-md border overflow-x-auto">
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Contato</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead>Última mensagem</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="whitespace-nowrap">Contato</TableHead>
+                <TableHead className="whitespace-nowrap">Telefone</TableHead>
+                <TableHead className="min-w-[220px]">Última mensagem</TableHead>
+                <TableHead className="whitespace-nowrap">Data</TableHead>
+                <TableHead className="whitespace-nowrap">Status</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -120,12 +120,12 @@ export default function Historico() {
               )}
               {filtradas.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.contato_nome ?? "Sem nome"}</TableCell>
-                  <TableCell>{formatPhoneBR(c.telefone)}</TableCell>
-                  <TableCell className="max-w-xs truncate">{c.ultima_mensagem ?? "—"}</TableCell>
-                  <TableCell>{c.ultima_mensagem_em ? new Date(c.ultima_mensagem_em).toLocaleString("pt-BR") : "—"}</TableCell>
-                  <TableCell><Badge variant="secondary">{c.status}</Badge></TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="font-medium whitespace-nowrap">{c.contato_nome ?? "Sem nome"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{formatPhoneBR(c.telefone)}</TableCell>
+                  <TableCell className="max-w-[280px] truncate">{c.ultima_mensagem ?? "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap">{c.ultima_mensagem_em ? new Date(c.ultima_mensagem_em).toLocaleString("pt-BR") : "—"}</TableCell>
+                  <TableCell className="whitespace-nowrap"><Badge variant="secondary">{c.status}</Badge></TableCell>
+                  <TableCell className="text-right whitespace-nowrap">
                     <Button size="sm" variant="ghost" onClick={() => setVerConversa(c)}>
                       <Eye className="h-4 w-4" />
                     </Button>

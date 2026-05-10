@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { authLog } from "@/modules/auth/utils/authLogger";
+import { getSessionJti, getDeviceLabel, clearSessionJti } from "@/shared/auth/sessionFingerprint";
 
 export type SignUpInput = {
   nome: string;
@@ -48,6 +49,21 @@ export const authService = {
     }
 
     authLog("info", "signIn.success", { userId: result.data.user.id });
+
+    // Regista a sessão da app no servidor (single-session enforcement).
+    // Política: novo desliga antigo. Em caso de falha, prosseguimos
+    // (a UI continua usável; o heartbeat fará nova tentativa).
+    try {
+      await supabase.functions.invoke("auth-register-session", {
+        body: {
+          session_jti: getSessionJti(),
+          device_label: getDeviceLabel(),
+        },
+      });
+    } catch (e) {
+      authLog("warn", "signIn.register_session_failed", { message: e instanceof Error ? e.message : String(e) });
+    }
+
     return result;
   },
 
@@ -66,6 +82,7 @@ export const authService = {
   async signOut() {
     authLog("info", "signOut.attempt");
     const result = await supabase.auth.signOut();
+    clearSessionJti();
     // Limpa qualquer dado sensível que possa ter sido armazenado localmente
     try {
       Object.keys(localStorage).forEach((key) => {

@@ -3,6 +3,8 @@ import { NavLink } from "react-router-dom";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useCompany } from "@/modules/settings/contexts/CompanyContext";
+import { canAccessRoute } from "@/shared/auth/routePermissions";
 
 export interface HubMetric {
   label: string;
@@ -50,6 +52,11 @@ export default function HubLayout({
   submodules,
   extra,
 }: Props) {
+  const { hasPermission, isSuperAdmin, loading } = useCompany();
+  const visibleSubmodules = submodules.filter((sub) =>
+    canAccessRoute(sub.to, hasPermission, isSuperAdmin),
+  );
+
   return (
     <div className="space-y-6 animate-fade-in-page">
       <div className="flex items-start gap-4">
@@ -106,7 +113,13 @@ export default function HubLayout({
           Submódulos
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {submodules.map((sub) => (
+          {!loading && visibleSubmodules.length === 0 ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Nenhum submódulo disponível para este perfil.
+              </CardContent>
+            </Card>
+          ) : visibleSubmodules.map((sub) => (
             <NavLink
               key={sub.to}
               to={sub.to}

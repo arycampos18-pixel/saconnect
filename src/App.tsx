@@ -38,10 +38,12 @@ const Resultados = lazy(() => import("@/modules/pesquisa/pages/Resultados"));
 const PesquisaPublica = lazy(() => import("@/modules/pesquisa/pages/PesquisaPublica"));
 const Mapa = lazy(() => import("@/modules/mapa/pages/Mapa"));
 const Relatorios = lazy(() => import("@/modules/relatorios/pages/Relatorios"));
+const RelatoriosHub = lazy(() => import("@/modules/relatorios/pages/RelatoriosHub"));
 const Agenda = lazy(() => import("@/modules/agenda/pages/Agenda"));
 const Aniversariantes = lazy(() => import("@/modules/aniversariantes/pages/Aniversariantes"));
 const Predicao = lazy(() => import("@/modules/predicao/pages/Predicao"));
 const Automacoes = lazy(() => import("@/modules/automacao/pages/Automacoes"));
+const AutomacoesHub = lazy(() => import("@/modules/automacao/pages/AutomacoesHub"));
 const AutomacaoEditor = lazy(() => import("@/modules/automacao/pages/AutomacaoEditor"));
 const AutomacaoHistorico = lazy(() => import("@/modules/automacao/pages/AutomacaoHistorico"));
 const Concorrencia = lazy(() => import("@/modules/concorrencia/pages/Concorrencia"));
@@ -49,12 +51,12 @@ const Gamificacao = lazy(() => import("@/modules/gamificacao/pages/Gamificacao")
 const CRM = lazy(() => import("@/modules/crm/pages/CRM"));
 const Executivo = lazy(() => import("@/modules/executivo/pages/Executivo"));
 const Segmentacao = lazy(() => import("@/modules/segmentacao/pages/Segmentacao"));
-const Campanhas = lazy(() => import("@/modules/campanhas/pages/Campanhas"));
-const Aprovacoes = lazy(() => import("@/modules/aprovacoes/pages/Aprovacoes"));
-const Auditoria = lazy(() => import("@/modules/auditoria/pages/Auditoria"));
+const CampanhasHub = lazy(() => import("@/modules/campanhas/pages/CampanhasHub"));
 const Integracoes = lazy(() => import("@/modules/integracoes/pages/Integracoes"));
 const WhatsApp = lazy(() => import("@/modules/whatsapp/pages/WhatsApp"));
 const WhatsAppHub = lazy(() => import("@/modules/whatsapp/pages/WhatsAppHub"));
+const WhatsAppOverview = lazy(() => import("@/modules/whatsapp/pages/WhatsAppOverview"));
+const EventosOverview = lazy(() => import("@/modules/eventos/pages/EventosOverview"));
 const Atendimento = lazy(() => import("@/modules/atendimento/pages/Atendimento"));
 const AtendimentoDashboard = lazy(() => import("@/modules/atendimento/pages/AtendimentoDashboard"));
 const DepartamentosAtendimento = lazy(() => import("@/modules/atendimento/pages/Departamentos"));
@@ -64,10 +66,10 @@ const AtendimentoRoteamento = lazy(() => import("@/modules/atendimento/pages/Rot
 const ConfiguracoesWhatsApp = lazy(() => import("@/modules/atendimento/pages/Configuracoes"));
 const RelatoriosAtendimento = lazy(() => import("@/modules/atendimento/pages/Relatorios"));
 const ConfiguracoesAvancadasAtendimento = lazy(() => import("@/modules/atendimento/pages/ConfiguracoesAvancadas"));
+const StoriesAtendimento = lazy(() => import("@/modules/atendimento/pages/Stories"));
 const Chatbots = lazy(() => import("@/modules/chatbot/pages/Chatbots"));
 const ChatbotEditor = lazy(() => import("@/modules/chatbot/pages/ChatbotEditor"));
 const ChatbotSessoes = lazy(() => import("@/modules/chatbot/pages/ChatbotSessoes"));
-const Disparos = lazy(() => import("@/modules/disparos/pages/Disparos"));
 const DisparoDetalhe = lazy(() => import("@/modules/disparos/pages/DisparoDetalhe"));
 const DisparoOptout = lazy(() => import("@/modules/disparos/pages/DisparoOptout"));
 const DisparoConfig = lazy(() => import("@/modules/disparos/pages/DisparoConfig"));
@@ -82,10 +84,8 @@ const SettingsLayout = lazy(() => import("@/modules/settings/pages/SettingsLayou
 const SettingsDashboard = lazy(() => import("@/modules/settings/pages/SettingsDashboard"));
 const SettingsUsers = lazy(() => import("@/modules/settings/pages/UsersManager"));
 const SettingsCompanies = lazy(() => import("@/modules/settings/pages/CompaniesManager"));
-const SettingsProfiles = lazy(() => import("@/modules/settings/pages/ProfilesManager"));
-const SettingsPermissions = lazy(() => import("@/modules/settings/pages/PermissionsByProfilePage"));
+const SettingsRoles = lazy(() => import("@/modules/settings/pages/RolesPage"));
 const SettingsUserCompany = lazy(() => import("@/modules/settings/pages/UserCompanyLinksPage"));
-const SettingsAudit = lazy(() => import("@/modules/settings/pages/AuditLogs"));
 const SettingsGeneral = lazy(() => import("@/modules/settings/pages/GlobalSettings"));
 
 // Novo módulo WhatsApp multi-tenant (Módulo 2 SaaS)
@@ -94,7 +94,6 @@ const WADashboard = lazy(() => import("@/modules/whatsapp/pages/WADashboard"));
 const WASessions = lazy(() => import("@/modules/whatsapp/pages/WASessions"));
 const WAConversations = lazy(() => import("@/modules/whatsapp/pages/WAConversations"));
 const WAChat = lazy(() => import("@/modules/whatsapp/pages/WAChat"));
-const WAContacts = lazy(() => import("@/modules/whatsapp/pages/WAContacts"));
 const WACampaigns = lazy(() => import("@/modules/whatsapp/pages/WACampaigns"));
 const WAChatbot = lazy(() => import("@/modules/whatsapp/pages/WAChatbot"));
 const WAQueues = lazy(() => import("@/modules/whatsapp/pages/WAQueues"));
@@ -102,6 +101,7 @@ const WATemplates = lazy(() => import("@/modules/whatsapp/pages/WATemplates"));
 const WAIntegrations = lazy(() => import("@/modules/whatsapp/pages/WAIntegrations"));
 const WALogs = lazy(() => import("@/modules/whatsapp/pages/WALogs"));
 const WASettings = lazy(() => import("@/modules/whatsapp/pages/WASettings"));
+const WAConnection = lazy(() => import("@/modules/whatsapp/pages/WAConnection"));
 const WaLegacyRedirect = lazy(() => import("@/modules/whatsapp/pages/WaLegacyRedirect"));
 
 // Módulo 3 — Tickets / Chamados (SaaS multi-tenant)
@@ -109,7 +109,6 @@ const TicketsLayout = lazy(() => import("@/modules/tickets/pages/TicketsLayout")
 const TicketsDashboard = lazy(() => import("@/modules/tickets/pages/TicketsDashboard"));
 const TicketsList = lazy(() => import("@/modules/tickets/pages/TicketsList"));
 const TicketDetail = lazy(() => import("@/modules/tickets/pages/TicketDetail"));
-const TicketsCalendar = lazy(() => import("@/modules/tickets/pages/TicketsCalendar"));
 const TicketsQueues = lazy(() => import("@/modules/tickets/pages/TicketsQueues"));
 const TicketsCategories = lazy(() => import("@/modules/tickets/pages/TicketsCategories"));
 const TicketsSLA = lazy(() => import("@/modules/tickets/pages/TicketsSLA"));
@@ -123,6 +122,13 @@ const VoterCapture = lazy(() => import("@/modules/political/pages/VoterCapture")
 const ElectoralCRM = lazy(() => import("@/modules/political/pages/ElectoralCRM"));
 const SocialEvents = lazy(() => import("@/modules/political/pages/SocialEvents"));
 const CabinetAgenda = lazy(() => import("@/modules/political/pages/CabinetAgenda"));
+const AgendaEventos = lazy(() => import("@/modules/political/pages/AgendaEventos"));
+const CampanhaEstrategico = lazy(() => import("@/modules/political/pages/CampanhaEstrategico"));
+
+function AgendaEventosRedirect({ view }: { view: "calendar" | "list" }) {
+  try { window.localStorage.setItem("agendaEventosView", view); } catch { /* ignore */ }
+  return <Navigate to="/app/political/agenda-eventos" replace />;
+}
 const ElectoralMap = lazy(() => import("@/modules/political/pages/ElectoralMap"));
 const Polls = lazy(() => import("@/modules/political/pages/Polls"));
 const Birthdays = lazy(() => import("@/modules/political/pages/Birthdays"));
@@ -131,6 +137,12 @@ const Predictions = lazy(() => import("@/modules/political/pages/Predictions"));
 const Competitors = lazy(() => import("@/modules/political/pages/Competitors"));
 const Segmentation = lazy(() => import("@/modules/political/pages/Segmentation"));
 const CabinetDepartments = lazy(() => import("@/modules/political/pages/CabinetDepartments"));
+const Liderancas = lazy(() => import("@/modules/political/pages/Liderancas"));
+const CabosEleitorais = lazy(() => import("@/modules/political/pages/CabosEleitorais"));
+const MeusEleitores = lazy(() => import("@/modules/political/pages/MeusEleitores"));
+const CadastroCaboPublico = lazy(() => import("@/modules/political/pages/CadastroCaboPublico"));
+const HierarquiaDashboard = lazy(() => import("@/modules/political/pages/HierarquiaDashboard"));
+ const MetasGamificacao = lazy(() => import("@/modules/political/pages/MetasGamificacao"));
 
 // Módulo 5 — WhatsApp Meta (API Oficial)
 const MetaLayout = lazy(() => import("@/modules/whatsapp-meta/pages/MetaLayout"));
@@ -142,7 +154,43 @@ const MetaLeads = lazy(() => import("@/modules/whatsapp-meta/pages/MetaLeads"));
 const MetaOAuthCallback = lazy(() => import("@/modules/whatsapp-meta/pages/MetaOAuthCallback"));
 const MetaConnect = lazy(() => import("@/modules/whatsapp-meta/pages/MetaConnect"));
 
+// Módulo 7 — WhatsApp em Massa (Bulk multi-API)
+const WaBulkLayout = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkLayout"));
+const WaBulkDashboard = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkDashboard"));
+const WaBulkApis = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkApis"));
+const WaBulkConfiguracoes = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkConfiguracoes"));
+const WaBulkCampanhas = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkCampanhas"));
+const WaBulkCampanhaDetalhes = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkCampanhaDetalhes"));
+const WaBulkTemplates = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkTemplates"));
+const WaBulkFila = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkFila"));
+const WaBulkRelatorios = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkRelatorios"));
+const WaBulkOptout = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkOptout"));
+const WaBulkAtendimento = lazy(() => import("@/modules/whatsapp-bulk/pages/WaBulkAtendimento"));
+
 import { CompanyProvider } from "@/modules/settings/contexts/CompanyContext";
+
+// Módulo 6 — Análise Política Eleitoral
+const AnaliseLayout = lazy(() => import("@/modules/analise-politica/pages/AnaliseLayout"));
+const AnaliseDashboard = lazy(() => import("@/modules/analise-politica/pages/AnaliseDashboard"));
+const AnaliseEleitores = lazy(() => import("@/modules/analise-politica/pages/AnaliseEleitores"));
+const BaseEleitoresHub = lazy(() => import("@/modules/analise-politica/pages/BaseEleitoresHub"));
+const AnaliseValidacao = lazy(() => import("@/modules/analise-politica/pages/AnaliseValidacao"));
+const AnaliseConsultasApi = lazy(() => import("@/modules/analise-politica/pages/AnaliseConsultasApi"));
+const AnaliseEnriquecimentoConfig = lazy(() => import("@/modules/analise-politica/pages/AnaliseEnriquecimentoConfig"));
+const AnaliseConsultasCustosHub = lazy(() => import("@/modules/analise-politica/pages/AnaliseConsultasCustosHub"));
+const AnaliseRevisao = lazy(() => import("@/modules/analise-politica/pages/AnaliseRevisao"));
+const AnaliseAnalises = lazy(() => import("@/modules/analise-politica/pages/AnaliseAnalises"));
+const AnaliseRelatorios = lazy(() => import("@/modules/analise-politica/pages/AnaliseRelatorios"));
+const AnaliseCustosApi = lazy(() => import("@/modules/analise-politica/pages/AnaliseCustosApi"));
+const AnaliseFinanceiroAdmin = lazy(() => import("@/modules/analise-politica/pages/AnaliseFinanceiroAdmin"));
+const AnaliseDuplicidades = lazy(() => import("@/modules/analise-politica/pages/AnaliseDuplicidades"));
+const AnaliseTSE = lazy(() => import("@/modules/analise-politica/pages/AnaliseTSE"));
+const AnaliseLogs = lazy(() => import("@/modules/analise-politica/pages/AnaliseLogs"));
+const AnaliseComparativo = lazy(() => import("@/modules/analise-politica/pages/AnaliseComparativo"));
+const AnaliseMapaEstrategico = lazy(() => import("@/modules/analise-politica/pages/AnaliseMapaEstrategico"));
+const AnaliseLGPD = lazy(() => import("@/modules/analise-politica/pages/AnaliseLGPD"));
+const AnalisePerformance = lazy(() => import("@/modules/analise-politica/pages/AnalisePerformance"));
+const AnaliseHomologacao = lazy(() => import("@/modules/analise-politica/pages/AnaliseHomologacao"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -180,6 +228,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/cadastro-publico" element={<CadastroPublico />} />
             <Route path="/p/:slug" element={<PesquisaPublica />} />
+            <Route path="/cabo/r/:token" element={<CadastroCaboPublico />} />
             <Route
               path="/app"
               element={
@@ -204,13 +253,15 @@ const App = () => (
               {/* Rotas antigas → redirects para /app/political/* */}
               <Route path="eleitores" element={<Navigate to="/app/political/voters" replace />} />
               <Route path="captacao" element={<Navigate to="/app/political/capture" replace />} />
-              <Route path="eventos" element={<Navigate to="/app/political/events" replace />} />
+              <Route path="eventos" element={<EventosOverview />} />
+              <Route path="pessoas" element={<Navigate to="/app/political/dashboard" replace />} />
+              <Route path="pessoas/*" element={<Navigate to="/app/political/dashboard" replace />} />
               <Route path="pesquisas" element={<Navigate to="/app/political/polls" replace />} />
               <Route path="pesquisas/nova" element={<NovaPesquisa />} />
               <Route path="pesquisas/:id/editar" element={<NovaPesquisa />} />
               <Route path="pesquisas/:id" element={<Resultados />} />
               <Route path="mapa" element={<Navigate to="/app/political/map" replace />} />
-              <Route path="relatorios" element={<Relatorios />} />
+              <Route path="relatorios" element={<RelatoriosHub />} />
               <Route path="predicao" element={<Navigate to="/app/political/predictions" replace />} />
               <Route path="automacoes" element={<Automacoes />} />
               <Route path="automacoes/historico" element={<AutomacaoHistorico />} />
@@ -220,17 +271,18 @@ const App = () => (
               <Route path="crm" element={<Navigate to="/app/political/crm" replace />} />
               <Route path="executivo" element={<Executivo />} />
               <Route path="segmentacao" element={<Navigate to="/app/political/segmentation" replace />} />
-              <Route path="campanhas" element={<Campanhas />} />
-              <Route path="disparos" element={<Disparos />} />
+              <Route path="campanhas" element={<CampanhasHub />} />
+              <Route path="disparos" element={<Navigate to="/app/campanhas?tipo=rapido" replace />} />
               <Route path="disparos/optout" element={<DisparoOptout />} />
               <Route path="disparos/config" element={<DisparoConfig />} />
               <Route path="disparos/:id" element={<DisparoDetalhe />} />
-              <Route path="aprovacoes" element={<Aprovacoes />} />
-              <Route path="auditoria" element={<Auditoria />} />
               <Route path="integracoes" element={<Integracoes />} />
-              <Route path="whatsapp" element={<WhatsApp />} />
-              <Route path="whatsapp-hub" element={<WhatsAppHub />} />
+              {/* WhatsApp legados → consolidados em /app/whatsapp/dashboard e /app/atendimento */}
+              <Route path="whatsapp-legacy" element={<WhatsApp />} />
+              <Route path="whatsapp-hub-legacy" element={<WhatsAppHub />} />
               <Route path="atendimento" element={<Atendimento />} />
+              <Route path="atendimento/envio-rico" element={<Navigate to="/app/campanhas" replace />} />
+              <Route path="atendimento/envio-massa" element={<Comunicacao />} />
               <Route path="atendimento/dashboard" element={<AtendimentoDashboard />} />
               <Route path="atendimento/relatorios" element={<RelatoriosAtendimento />} />
               <Route path="atendimento/departamentos" element={<DepartamentosAtendimento />} />
@@ -239,35 +291,45 @@ const App = () => (
               <Route path="atendimento/roteamento" element={<AtendimentoRoteamento />} />
               <Route path="atendimento/configuracoes" element={<ConfiguracoesWhatsApp />} />
               <Route path="atendimento/configuracoes-avancadas" element={<ConfiguracoesAvancadasAtendimento />} />
+              <Route path="atendimento/stories" element={<StoriesAtendimento />} />
               <Route path="chatbot" element={<Chatbots />} />
               <Route path="chatbot/sessoes" element={<ChatbotSessoes />} />
               <Route path="chatbot/:id" element={<ChatbotEditor />} />
+              <Route path="automacoes-hub" element={<AutomacoesHub />} />
               <Route path="agenda" element={<Navigate to="/app/political/agenda" replace />} />
               <Route path="aniversariantes" element={<Navigate to="/app/political/birthdays" replace />} />
-              <Route path="comunicacao" element={<Comunicacao />} />
+              <Route path="comunicacao" element={<Navigate to="/app/whatsapp/compositor" replace />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="backup" element={<Backup />} />
               <Route path="webhooks" element={<Webhooks />} />
               <Route path="notificacoes" element={<Notificacoes />} />
               <Route path="cadastros" element={<Cadastros />} />
               <Route path="departamentos-gabinete" element={<Navigate to="/app/political/departments" replace />} />
-              <Route path="departamentos-gabinete/:id" element={<DepartamentoGabineteDetalhe />} />
+              <Route path="departamentos-gabinete/:id" element={<Navigate to="/app/political/departments" replace />} />
               <Route path="political" element={<PoliticalLayout />}>
                 <Route index element={<Navigate to="dashboard" replace />} />
                 <Route path="dashboard" element={<PoliticalDashboard />} />
                 <Route path="voters" element={<VotersList />} />
                 <Route path="capture" element={<VoterCapture />} />
                 <Route path="crm" element={<ElectoralCRM />} />
-                <Route path="events" element={<SocialEvents />} />
-                <Route path="agenda" element={<CabinetAgenda />} />
+                <Route path="events" element={<AgendaEventosRedirect view="list" />} />
+                <Route path="agenda" element={<AgendaEventosRedirect view="calendar" />} />
+                <Route path="agenda-eventos" element={<AgendaEventos />} />
                 <Route path="map" element={<ElectoralMap />} />
+                <Route path="analise/campanha-estrategico" element={<CampanhaEstrategico />} />
                 <Route path="polls" element={<Polls />} />
-                <Route path="birthdays" element={<Birthdays />} />
+                 <Route path="birthdays" element={<Birthdays />} />
                 <Route path="gamification" element={<Gamification />} />
                 <Route path="predictions" element={<Predictions />} />
                 <Route path="competitors" element={<Competitors />} />
                 <Route path="segmentation" element={<Segmentation />} />
                 <Route path="departments" element={<CabinetDepartments />} />
+                <Route path="departments/:id" element={<DepartamentoGabineteDetalhe />} />
+                <Route path="liderancas" element={<Liderancas />} />
+                <Route path="cabos" element={<CabosEleitorais />} />
+                <Route path="meus-eleitores" element={<MeusEleitores />} />
+                <Route path="hierarquia" element={<HierarquiaDashboard />} />
+                <Route path="metas-gamificacao" element={<MetasGamificacao />} />
               </Route>
               <Route path="settings" element={<SettingsLayout />}>
                 <Route index element={<Navigate to="dashboard" replace />} />
@@ -275,22 +337,24 @@ const App = () => (
                 <Route path="users" element={<SettingsUsers />} />
                 <Route path="user-company" element={<SettingsUserCompany />} />
                 <Route path="companies" element={<SettingsCompanies />} />
-                <Route path="profiles" element={<SettingsProfiles />} />
-                <Route path="permissions" element={<SettingsPermissions />} />
-                <Route path="audit" element={<SettingsAudit />} />
+                <Route path="roles" element={<SettingsRoles />} />
+                <Route path="profiles" element={<Navigate to="/app/settings/roles" replace />} />
+                <Route path="permissions" element={<Navigate to="/app/settings/roles" replace />} />
                 <Route path="general" element={<SettingsGeneral />} />
               </Route>
               <Route path="whatsapp" element={<WhatsAppLayout />}>
-                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route index element={<WhatsAppOverview />} />
                 <Route path="dashboard" element={<WADashboard />} />
                 <Route path="sessions" element={<WASessions />} />
-                <Route path="conversations" element={<WAConversations />} />
+                <Route path="connection" element={<Navigate to="/app/whatsapp/sessions" replace />} />
+                <Route path="compositor" element={<Navigate to="/app/campanhas" replace />} />
+                <Route path="conversations" element={<Navigate to="/app/whatsapp/chat" replace />} />
                 <Route path="chat" element={<WAChat />} />
-                <Route path="contacts" element={<WAContacts />} />
+                <Route path="contacts" element={<Navigate to="/app/analise-de-eleitores/base" replace />} />
                 <Route path="campaigns" element={<WACampaigns />} />
                 <Route path="bot" element={<WAChatbot />} />
                 <Route path="queues" element={<WAQueues />} />
-                <Route path="templates" element={<WATemplates />} />
+                <Route path="templates" element={<Navigate to="/app/whatsapp/dashboard" replace />} />
                 <Route path="integrations" element={<WAIntegrations />} />
                 <Route path="logs" element={<WALogs />} />
                 <Route path="settings" element={<WASettings />} />
@@ -301,7 +365,7 @@ const App = () => (
                 <Route path="dashboard" element={<TicketsDashboard />} />
                 <Route path="list" element={<TicketsList />} />
                 <Route path="view/:id" element={<TicketDetail />} />
-                <Route path="calendar" element={<TicketsCalendar />} />
+                <Route path="calendar" element={<Navigate to="/app/tickets/list" replace />} />
                 <Route path="queues" element={<TicketsQueues />} />
                 <Route path="categories" element={<TicketsCategories />} />
                 <Route path="sla" element={<TicketsSLA />} />
@@ -317,6 +381,97 @@ const App = () => (
                 <Route path="campaigns" element={<MetaCampaigns />} />
                 <Route path="leads" element={<MetaLeads />} />
               </Route>
+              <Route path="whatsapp-bulk" element={<WaBulkLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<WaBulkDashboard />} />
+                <Route path="apis" element={<WaBulkApis />} />
+                <Route path="campanhas" element={<WaBulkCampanhas />} />
+                <Route path="campanhas/:id" element={<WaBulkCampanhaDetalhes />} />
+                <Route path="templates" element={<WaBulkTemplates />} />
+                <Route path="atendimento" element={<WaBulkAtendimento />} />
+                <Route path="fila" element={<WaBulkFila />} />
+                <Route path="relatorios" element={<WaBulkRelatorios />} />
+                <Route path="optout" element={<WaBulkOptout />} />
+                <Route path="configuracoes" element={<WaBulkConfiguracoes />} />
+              </Route>
+              <Route path="analise" element={<AnaliseLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<AnaliseDashboard />} />
+                <Route path="eleitores" element={<AnaliseEleitores />} />
+                <Route path="validacao" element={<AnaliseValidacao />} />
+                <Route path="consultas-api" element={<AnaliseConsultasApi />} />
+                <Route path="revisao" element={<AnaliseRevisao />} />
+                <Route path="analises" element={<AnaliseAnalises />} />
+                <Route path="relatorios" element={<AnaliseRelatorios />} />
+                <Route path="custos-api" element={<AnaliseCustosApi />} />
+                <Route path="financeiro-admin" element={<AnaliseFinanceiroAdmin />} />
+                <Route path="duplicidades" element={<AnaliseDuplicidades />} />
+                <Route path="tse" element={<AnaliseTSE />} />
+                <Route path="comparativo" element={<AnaliseComparativo />} />
+                <Route path="mapa-estrategico" element={<AnaliseMapaEstrategico />} />
+                <Route path="lgpd" element={<AnaliseLGPD />} />
+                <Route path="logs" element={<AnaliseLogs />} />
+                <Route path="performance" element={<AnalisePerformance />} />
+                <Route path="homologacao" element={<AnaliseHomologacao />} />
+                <Route path="enriquecimento-config" element={<AnaliseEnriquecimentoConfig />} />
+              </Route>
+              {/* ===== Módulo unificado: Análise de Eleitores ===== */}
+              <Route path="analise-de-eleitores" element={<AnaliseLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<AnaliseDashboard />} />
+                {/* Gestão */}
+                <Route path="base" element={<BaseEleitoresHub />} />
+                <Route path="eleitores" element={<Navigate to="/app/analise-de-eleitores/base?aba=todos" replace />} />
+                <Route path="meus-eleitores" element={<Navigate to="/app/analise-de-eleitores/base?aba=meus" replace />} />
+                <Route path="eleitores-lideranca" element={<Navigate to="/app/analise-de-eleitores/base?aba=lideranca" replace />} />
+                <Route path="segmentacao" element={<Navigate to="/app/analise-de-eleitores/base?aba=segmentacoes" replace />} />
+                <Route path="crm" element={<Navigate to="/app/analise-de-eleitores/base?aba=crm" replace />} />
+                <Route path="novo-eleitor" element={<VoterCapture />} />
+                <Route path="liderancas" element={<Liderancas />} />
+                <Route path="cabos" element={<CabosEleitorais />} />
+                <Route path="atribuicoes" element={<Navigate to="/app/analise-de-eleitores/cabos?tab=atribuicoes" replace />} />
+                <Route path="hierarquia" element={<HierarquiaDashboard />} />
+                <Route path="metas-gamificacao" element={<MetasGamificacao />} />
+                {/* Validação */}
+                <Route path="validacao" element={<AnaliseValidacao />} />
+                <Route path="consultas-api" element={<AnaliseConsultasApi />} />
+                <Route path="revisao-manual" element={<AnaliseRevisao />} />
+                <Route path="duplicidades" element={<AnaliseDuplicidades />} />
+                <Route path="divergencias" element={<Navigate to="/app/analise-de-eleitores/validacao?aba=divergencias" replace />} />
+                {/* Análises */}
+                <Route path="predicao" element={<Predictions />} />
+                <Route path="concorrencia" element={<Competitors />} />
+                <Route path="mapa-estrategico" element={<AnaliseMapaEstrategico />} />
+                <Route path="comparativo-pos-eleicao" element={<AnaliseComparativo />} />
+                <Route path="resultados-tse" element={<AnaliseTSE />} />
+                <Route path="pesquisas" element={<Polls />} />
+                <Route path="eventos" element={<SocialEvents />} />
+                <Route path="agenda" element={<CabinetAgenda />} />
+                <Route path="aniversariantes" element={<Birthdays />} />
+                <Route path="analises" element={<AnaliseAnalises />} />
+                {/* Relatórios */}
+                <Route path="relatorios" element={<AnaliseRelatorios />} />
+                {/* Segurança & Compliance */}
+                <Route path="seguranca-lgpd" element={<AnaliseLGPD />} />
+                <Route path="logs" element={<AnaliseLogs />} />
+                <Route path="consentimentos" element={<Navigate to="/app/analise-de-eleitores/seguranca-lgpd?aba=consentimentos" replace />} />
+                {/* Configuração */}
+                <Route path="custos-api" element={<AnaliseCustosApi />} />
+                <Route path="integracoes" element={<Integracoes />} />
+                <Route path="webhooks" element={<Webhooks />} />
+                <Route path="configuracoes" element={<Configuracoes />} />
+                <Route path="enriquecimento-config" element={<AnaliseEnriquecimentoConfig />} />
+                <Route path="consultas-custos" element={<AnaliseConsultasCustosHub />} />
+                <Route path="departamentos" element={<CabinetDepartments />} />
+                <Route path="performance" element={<AnalisePerformance />} />
+                <Route path="homologacao" element={<AnaliseHomologacao />} />
+                <Route path="financeiro-admin" element={<AnaliseFinanceiroAdmin />} />
+              </Route>
+              {/* Aliases / redirects do módulo unificado */}
+              <Route path="politico" element={<Navigate to="/app/analise-de-eleitores" replace />} />
+              <Route path="politico/*" element={<Navigate to="/app/analise-de-eleitores" replace />} />
+              <Route path="analise-eleitoral" element={<Navigate to="/app/analise-de-eleitores" replace />} />
+              <Route path="analise-eleitoral/*" element={<Navigate to="/app/analise-de-eleitores" replace />} />
               <Route path="perfil" element={<Perfil />} />
             </Route>
             <Route path="*" element={<NotFound />} />

@@ -63,6 +63,24 @@ export const TAGS_SUGERIDAS = [
 ];
 
 export const atendimentoService = {
+  async _callZapi(action: string, payload: any = {}) {
+    const { data: session } = await supabase.auth.getSession();
+    const token = session.session?.access_token;
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zapi-instance`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ action, payload }),
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(json?.error || `Falha Z-API (${resp.status})`);
+    return json.data;
+  },
+
   async listarConversas(filtros?: {
     status?: ConversaStatus;
     departamentoId?: string | null;
@@ -105,6 +123,13 @@ export const atendimentoService = {
   },
 
   async marcarLidas(conversaId: string) {
+    const { data: conv } = await supabase
+      .from("whatsapp_conversas").select("telefone").eq("id", conversaId).single();
+    
+    if (conv?.telefone) {
+      try { await this._callZapi("read-chat", { phone: conv.telefone }); } catch (e) { console.warn("Erro Z-API read-chat:", e); }
+    }
+
     await supabase
       .from("whatsapp_conversas")
       .update({ nao_lidas: 0 })
@@ -127,6 +152,13 @@ export const atendimentoService = {
   },
 
   async finalizar(conversaId: string) {
+    const { data: conv } = await supabase
+      .from("whatsapp_conversas").select("telefone").eq("id", conversaId).single();
+    
+    if (conv?.telefone) {
+      try { await this._callZapi("archive-chat", { phone: conv.telefone, value: true }); } catch (e) { console.warn("Erro Z-API archive-chat:", e); }
+    }
+
     const { error } = await supabase
       .from("whatsapp_conversas")
       .update({
@@ -138,6 +170,13 @@ export const atendimentoService = {
   },
 
   async reabrir(conversaId: string) {
+    const { data: conv } = await supabase
+      .from("whatsapp_conversas").select("telefone").eq("id", conversaId).single();
+    
+    if (conv?.telefone) {
+      try { await this._callZapi("archive-chat", { phone: conv.telefone, value: false }); } catch (e) { console.warn("Erro Z-API unarchive-chat:", e); }
+    }
+
     const { error } = await supabase
       .from("whatsapp_conversas")
       .update({ status: "Em atendimento", finalizada_em: null })
@@ -171,7 +210,6 @@ export const atendimentoService = {
     const telefone = digits.startsWith("55") ? `+${digits}` : `+55${digits}`;
     const telefone_digits = digits.startsWith("55") ? digits : `55${digits}`;
 
-    // Já existe?
     const { data: existente } = await supabase
       .from("whatsapp_conversas")
       .select("id")
@@ -287,5 +325,59 @@ export const atendimentoService = {
     }
 
     return json;
+  },
+
+  // Chamadas
+  async realizarChamada(phone: string) {
+    return this._callZapi("send-call", { phone });
+  },
+  async getCallToken() {
+    return this._callZapi("get-call-token");
+  },
+  async getSipInfo() {
+    return this._callZapi("get-sip-info");
+  },
+
+  // Status (Stories)
+  async enviarStatusTexto(text: string, backgroundColor?: string) {
+    return this._callZapi("send-text-status", { text, backgroundColor });
+  },
+  async enviarStatusImagem(image: string, caption?: string) {
+    return this._callZapi("send-image-status", { image, caption });
+  },
+  async enviarStatusVideo(video: string, caption?: string) {
+    return this._callZapi("send-video-status", { video, caption });
+  },
+  async responderStatusTexto(payload: { phone: string; messageId: string; text: string }) {
+    return this._callZapi("reply-status-text", payload);
+  },
+  async responderStatusGif(payload: { phone: string; messageId: string; gif: string; caption?: string }) {
+    return this._callZapi("reply-status-gif", payload);
+  },
+  async responderStatusSticker(payload: { phone: string; messageId: string; sticker: string }) {
+    return this._callZapi("reply-status-sticker", payload);
+  },
+
+  // Chats Z-API
+  async getChats(params?: { page?: number; pageSize?: number }) {
+    return this._callZapi("get-chats", params ?? {});
+  },
+  async getChatMetadata(phone: string) {
+    return this._callZapi("get-metadata-chat", { phone });
+  },
+  async limparChat(phone: string) {
+    return this._callZapi("clear-chat", { phone });
+  },
+  async enviarExpiracaoChat(phone: string, value: 0 | 86400 | 604800 | 7776000) {
+    // 0 = off, 86400 = 24h, 604800 = 7 dias, 7776000 = 90 dias
+    return this._callZapi("send-chat-expiration", { phone, value });
+  },
+
+  // Fila
+  async getQueue() {
+    return this._callZapi("get-queue");
+  },
+  async limparFila() {
+    return this._callZapi("delete-queue");
   },
 };

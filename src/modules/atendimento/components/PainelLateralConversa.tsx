@@ -122,7 +122,7 @@ export function PainelLateralConversa({ conversa }: Props) {
     uid ? ((atendentes as any[]).find((a) => a.user_id === uid)?.nome ?? "Atendente") : "Sistema";
 
   return (
-    <aside className="hidden w-80 shrink-0 flex-col border-l bg-card lg:flex">
+    <aside className="hidden w-80 shrink-0 flex-col border-l bg-card xl:flex">
       <Tabs defaultValue="eleitor" className="flex h-full flex-col">
         <TabsList className="m-2 grid grid-cols-3">
           <TabsTrigger value="eleitor"><User className="mr-1 h-3 w-3" />Eleitor</TabsTrigger>

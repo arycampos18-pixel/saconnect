@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_sessions SET status='connected', updated_at=now() WHERE provider='zapi';

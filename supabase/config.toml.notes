@@ -1,0 +1,4 @@
+# wa-bulk-webhook precisa de verify_jwt=false (chamada pública pela Meta).
+# Ajuste manual sugerido em supabase/config.toml:
+# [functions.wa-bulk-webhook]
+# verify_jwt = false

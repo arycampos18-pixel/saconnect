@@ -97,7 +97,7 @@ export default function Mapa() {
           <label className="text-xs font-medium text-muted-foreground">Cidade</label>
           <Select value={cidade} onValueChange={setCidade}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[1000]">
               <SelectItem value="todas">Todas</SelectItem>
               {cidades.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
@@ -107,7 +107,7 @@ export default function Mapa() {
           <label className="text-xs font-medium text-muted-foreground">Liderança</label>
           <Select value={liderancaId} onValueChange={setLiderancaId}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[1000]">
               <SelectItem value="todas">Todas</SelectItem>
               {liderancas.map((l) => <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>)}
             </SelectContent>
@@ -117,7 +117,7 @@ export default function Mapa() {
           <label className="text-xs font-medium text-muted-foreground">Tag</label>
           <Select value={tagId} onValueChange={setTagId}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[1000]">
               <SelectItem value="todas">Todas</SelectItem>
               {tags.map((t) => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
             </SelectContent>

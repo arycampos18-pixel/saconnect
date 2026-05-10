@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery } from "@tanstack/react-query";
 import { ticketsService } from "../services/ticketsService";
 import { toast } from "sonner";
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
 
 export function TicketFormDialog({
   open, onOpenChange, companyId, onCreated,
@@ -25,7 +26,7 @@ export function TicketFormDialog({
   }, [open]);
 
   const { data: queues } = useQuery({ queryKey: ["t_queues", companyId], queryFn: () => ticketsService.listQueues(companyId), enabled: open });
-  const { data: cats } = useQuery({ queryKey: ["t_cats", companyId], queryFn: () => ticketsService.listCategories(companyId), enabled: open });
+  const { data: cats, refetch: refetchCats } = useQuery({ queryKey: ["t_cats", companyId], queryFn: () => ticketsService.listCategories(companyId), enabled: open });
 
   async function handleSave() {
     if (!form.title.trim()) return toast.error("Informe um título");
@@ -76,13 +77,16 @@ export function TicketFormDialog({
             </div>
             <div>
               <Label>Categoria</Label>
-              <Select value={form.category_id || "_none"} onValueChange={v => setForm({ ...form, category_id: v === "_none" ? "" : v })}>
-                <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">—</SelectItem>
-                  {cats?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="categorias"
+                label="categoria"
+                opcoes={(cats ?? []).map((c: any) => ({ id: c.id, nome: c.name }))}
+                value={form.category_id || null}
+                onChange={(v) => setForm({ ...form, category_id: v ?? "" })}
+                emptyOptionLabel="—"
+                placeholder="—"
+                onCreated={(item) => { setForm((f) => ({ ...f, category_id: item.id })); refetchCats(); }}
+              />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">

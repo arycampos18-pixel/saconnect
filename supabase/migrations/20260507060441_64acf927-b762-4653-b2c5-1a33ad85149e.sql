@@ -1,0 +1,1 @@
+DELETE FROM public.settings_permissions WHERE id IN ('settings.global.view','settings.global.manage');

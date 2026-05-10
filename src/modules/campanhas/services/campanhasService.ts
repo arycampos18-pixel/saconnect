@@ -48,17 +48,25 @@ export const campanhasService = {
     nome: string;
     canal: "WhatsApp" | "SMS" | "Email";
     conteudo: string;
-    segmento_id: string;
+    segmento_id?: string | null;
+    filtros_adhoc?: any;
+    nome_filtro?: string;
     apenas_lgpd: boolean;
   }) {
-    const { data: seg, error: e1 } = await supabase
-      .from("segmentos")
-      .select("filtros, nome")
-      .eq("id", input.segmento_id)
-      .single();
-    if (e1) throw e1;
+    let segNome = input.nome_filtro ?? "Filtro rápido";
+    let filtros: any = input.filtros_adhoc ?? {};
+    if (input.segmento_id) {
+      const { data: seg, error: e1 } = await supabase
+        .from("segmentos")
+        .select("filtros, nome")
+        .eq("id", input.segmento_id)
+        .single();
+      if (e1) throw e1;
+      filtros = (seg as any).filtros ?? {};
+      segNome = (seg as any).nome;
+    }
 
-    const eleitores = await segmentacaoService.preview((seg as any).filtros ?? {});
+    const eleitores = await segmentacaoService.preview(filtros);
     const filtrados = eleitores.filter((e: any) => {
       if (input.apenas_lgpd && !e.consentimento_lgpd) return false;
       if (input.canal === "Email" && !e.email) return false;
@@ -70,9 +78,9 @@ export const campanhasService = {
     const { data: mensagem, error } = await supabase.from("mensagens").insert({
       canal: input.canal,
       conteudo: input.conteudo,
-      publico_alvo: `Segmento: ${(seg as any).nome}`,
+      publico_alvo: input.segmento_id ? `Segmento: ${segNome}` : `Filtro: ${segNome}`,
       total_destinatarios: filtrados.length,
-      segmento_id: input.segmento_id,
+      segmento_id: input.segmento_id ?? null,
       nome_campanha: input.nome,
       enviado_por: u.user?.id ?? null,
       status: input.canal === "WhatsApp" ? "Enviando" : "Enviada",
@@ -105,6 +113,19 @@ export const campanhasService = {
     }
 
     return filtrados.length;
+  },
+
+  async previewFiltros(filtros: any): Promise<PreviewSegmento> {
+    const eleitores = await segmentacaoService.preview(filtros);
+    return {
+      total: eleitores.length,
+      comTelefone: eleitores.filter((e: any) => e.telefone).length,
+      comEmail: eleitores.filter((e: any) => e.email).length,
+      comConsentimento: eleitores.filter((e: any) => e.consentimento_lgpd).length,
+      exemplos: eleitores.slice(0, 5).map((e: any) => ({
+        nome: e.nome, telefone: e.telefone, email: e.email,
+      })),
+    };
   },
 
   async listarCampanhas(): Promise<Campanha[]> {

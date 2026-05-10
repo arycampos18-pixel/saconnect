@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useUserRole } from "@/modules/auth/hooks/useUserRole";
@@ -295,13 +296,16 @@ function FormDialog({
             </div>
             <div>
               <Label>Departamento</Label>
-              <Select value={depId} onValueChange={setDepId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="global">Global (todos)</SelectItem>
-                  {deptos.map((d) => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="departamentos"
+                label="departamento"
+                opcoes={deptos.map((d) => ({ id: d.id, nome: d.nome }))}
+                value={depId === "global" ? null : depId}
+                onChange={(v) => setDepId(v ?? "global")}
+                emptyOptionLabel="Global (todos)"
+                placeholder="Global (todos)"
+                onCreated={(item) => { setDepId(item.id); }}
+              />
             </div>
           </div>
           <div className="flex items-center gap-2">

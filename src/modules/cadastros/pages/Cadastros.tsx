@@ -21,7 +21,6 @@ import { NovoCaboForm } from "../components/NovoCaboForm";
 import { NovaLiderancaForm } from "../components/NovaLiderancaForm";
 import { NovaOrganizacaoForm } from "../components/NovaOrganizacaoForm";
 import { PermissoesPanel } from "../components/PermissoesPanel";
-import { HistoricoPermissoes } from "../components/HistoricoPermissoes";
 import { ModulosManager } from "../components/ModulosManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV, toCSV } from "@/shared/utils/csv";
@@ -344,7 +343,6 @@ export default function Cadastros() {
                   <TabsList>
                     <TabsTrigger value="atribuir">Atribuir papel</TabsTrigger>
                     <TabsTrigger value="modulos">Gerenciar Módulos por Perfil</TabsTrigger>
-                    <TabsTrigger value="historico">Histórico de Permissões</TabsTrigger>
                   </TabsList>
                   <TabsContent value="atribuir" className="mt-4">
                     <PermissoesPanel />
@@ -352,24 +350,12 @@ export default function Cadastros() {
                   <TabsContent value="modulos" className="mt-4">
                     <ModulosManager />
                   </TabsContent>
-                  <TabsContent value="historico" className="mt-4">
-                    <HistoricoPermissoes />
-                  </TabsContent>
                 </Tabs>
               </AccordionContent>
             </AccordionItem>
           </>
         )}
 
-        <AccordionItem value="auditoria" className="rounded-xl border bg-card px-4">
-          <AccordionTrigger className="text-base font-semibold">Auditoria de Cadastros</AccordionTrigger>
-          <AccordionContent className="pt-2">
-            <p className="rounded-lg bg-muted/40 p-4 text-sm text-muted-foreground">
-              Veja o módulo <strong>Auditoria & Logs</strong> no menu lateral — todas as ações deste módulo já
-              são registradas lá automaticamente.
-            </p>
-          </AccordionContent>
-        </AccordionItem>
       </Accordion>
 
       <CadastroAcoesDialog

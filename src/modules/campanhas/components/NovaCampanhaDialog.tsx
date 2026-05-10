@@ -8,8 +8,83 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { campanhasService, type PreviewSegmento } from "../services/campanhasService";
-import { segmentacaoService, type Segmento } from "@/modules/segmentacao/services/segmentacaoService";
-import { Users, Phone, Mail, ShieldCheck, Send } from "lucide-react";
+import { segmentacaoService, type Segmento, type SegmentoFiltros } from "@/modules/segmentacao/services/segmentacaoService";
+import { Users, Phone, Mail, ShieldCheck, Send, Search, Check, ChevronsUpDown, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+function MultiSelect({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: { value: string; label: string; color?: string }[];
+  selected: string[];
+  onToggle: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" className="mt-1 w-full justify-between font-normal h-auto min-h-9 py-1.5">
+            <div className="flex flex-wrap gap-1 items-center">
+              {selected.length === 0 ? (
+                <span className="text-muted-foreground text-sm">Todos</span>
+              ) : (
+                selected.slice(0, 4).map((v) => {
+                  const opt = options.find((o) => o.value === v);
+                  return (
+                    <Badge key={v} variant="secondary" className="gap-1 pl-2 pr-1">
+                      {opt?.color && <span className="inline-block h-2 w-2 rounded-full" style={{ background: opt.color }} />}
+                      {opt?.label ?? v}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onToggle(v); }}
+                        className="ml-0.5 rounded hover:bg-muted-foreground/20"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  );
+                })
+              )}
+              {selected.length > 4 && <Badge variant="secondary">+{selected.length - 4}</Badge>}
+            </div>
+            <Search className="ml-2 h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
+          <Command>
+            <CommandInput placeholder={`Buscar ${label.toLowerCase()}...`} />
+            <CommandList>
+              <CommandEmpty>Nenhum resultado.</CommandEmpty>
+              <CommandGroup>
+                {options.map((o) => {
+                  const isSel = selected.includes(o.value);
+                  return (
+                    <CommandItem key={o.value} value={o.label} onSelect={() => onToggle(o.value)}>
+                      <Check className={cn("mr-2 h-4 w-4", isSel ? "opacity-100" : "opacity-0")} />
+                      {o.color && <span className="inline-block h-2 w-2 rounded-full mr-2" style={{ background: o.color }} />}
+                      {o.label}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 interface Props {
   open: boolean;
@@ -19,7 +94,15 @@ interface Props {
 
 export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
+  const [loadingSeg, setLoadingSeg] = useState(false);
   const [segmentoId, setSegmentoId] = useState("");
+  const [segmentoOpen, setSegmentoOpen] = useState(false);
+  const [modo, setModo] = useState<"segmento" | "filtro">("segmento");
+  const [opcoes, setOpcoes] = useState<{
+    bairros: string[]; cidades: string[]; origens: string[];
+    tags: { id: string; nome: string; cor: string }[];
+  }>({ bairros: [], cidades: [], origens: [], tags: [] });
+  const [filtros, setFiltros] = useState<SegmentoFiltros>({});
   const [nome, setNome] = useState("");
   const [canal, setCanal] = useState<"WhatsApp" | "SMS" | "Email">("WhatsApp");
   const [conteudo, setConteudo] = useState("");
@@ -30,19 +113,45 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
 
   useEffect(() => {
     if (open) {
-      segmentacaoService.listar().then(setSegmentos);
-      setNome(""); setConteudo(""); setSegmentoId(""); setPreview(null); setApenasLgpd(true); setCanal("WhatsApp");
+      setLoadingSeg(true);
+      Promise.all([segmentacaoService.listar(), segmentacaoService.opcoesDisponiveis()])
+        .then(([segs, ops]) => {
+          setSegmentos(segs);
+          setOpcoes({
+            bairros: ops.bairros, cidades: ops.cidades, origens: ops.origens,
+            tags: ops.tags,
+          });
+        })
+        .catch((e) => toast.error("Erro ao carregar dados", { description: e.message }))
+        .finally(() => setLoadingSeg(false));
+      setNome(""); setConteudo(""); setSegmentoId(""); setPreview(null);
+      setApenasLgpd(true); setCanal("WhatsApp"); setFiltros({}); setModo("segmento");
     }
   }, [open]);
 
   useEffect(() => {
-    if (!segmentoId) { setPreview(null); return; }
-    setLoadingPrev(true);
-    campanhasService.previewSegmento(segmentoId)
-      .then(setPreview)
-      .catch((e) => toast.error("Erro no preview", { description: e.message }))
-      .finally(() => setLoadingPrev(false));
-  }, [segmentoId]);
+    if (modo === "segmento") {
+      if (!segmentoId) { setPreview(null); return; }
+      setLoadingPrev(true);
+      campanhasService.previewSegmento(segmentoId)
+        .then(setPreview)
+        .catch((e) => toast.error("Erro no preview", { description: e.message }))
+        .finally(() => setLoadingPrev(false));
+    } else {
+      const temFiltro = Object.values(filtros).some((v) =>
+        Array.isArray(v) ? v.length > 0 : v != null && v !== ""
+      );
+      if (!temFiltro) { setPreview(null); return; }
+      setLoadingPrev(true);
+      const t = setTimeout(() => {
+        campanhasService.previewFiltros(filtros)
+          .then(setPreview)
+          .catch((e) => toast.error("Erro no preview", { description: e.message }))
+          .finally(() => setLoadingPrev(false));
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [segmentoId, modo, filtros]);
 
   const elegiveis = preview
     ? canal === "Email"
@@ -51,12 +160,24 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
     : 0;
 
   const enviar = async () => {
-    if (!nome.trim() || !segmentoId || !conteudo.trim()) {
-      toast.error("Preencha nome, segmento e conteúdo"); return;
+    if (!nome.trim() || !conteudo.trim()) {
+      toast.error("Preencha nome e conteúdo"); return;
+    }
+    if (modo === "segmento" && !segmentoId) {
+      toast.error("Escolha um segmento"); return;
+    }
+    if (modo === "filtro" && !preview) {
+      toast.error("Defina ao menos um filtro"); return;
     }
     setEnviando(true);
     try {
-      const total = await campanhasService.enviarCampanha({ nome, canal, conteudo, segmento_id: segmentoId, apenas_lgpd: apenasLgpd });
+      const total = await campanhasService.enviarCampanha({
+        nome, canal, conteudo,
+        segmento_id: modo === "segmento" ? segmentoId : null,
+        filtros_adhoc: modo === "filtro" ? filtros : undefined,
+        nome_filtro: modo === "filtro" ? "Filtro rápido" : undefined,
+        apenas_lgpd: apenasLgpd,
+      });
       toast.success(`Campanha enviada para ${total} destinatários`);
       onOpenChange(false);
       onSent();
@@ -65,6 +186,15 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
     } finally {
       setEnviando(false);
     }
+  };
+
+  const segSelecionado = segmentos.find((s) => s.id === segmentoId);
+  const toggleArr = (key: keyof SegmentoFiltros, val: string) => {
+    setFiltros((prev) => {
+      const cur = (prev[key] as string[] | undefined) ?? [];
+      const next = cur.includes(val) ? cur.filter((x) => x !== val) : [...cur, val];
+      return { ...prev, [key]: next };
+    });
   };
 
   return (
@@ -87,15 +217,76 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
             </div>
           </div>
           <div>
-            <Label>Segmento alvo</Label>
-            <Select value={segmentoId} onValueChange={setSegmentoId}>
-              <SelectTrigger><SelectValue placeholder="Escolha um segmento..." /></SelectTrigger>
-              <SelectContent>
-                {segmentos.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.nome} ({s.total_cache})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Público-alvo</Label>
+            <Tabs value={modo} onValueChange={(v) => { setModo(v as any); setPreview(null); }} className="mt-1">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="segmento">Segmento salvo</TabsTrigger>
+                <TabsTrigger value="filtro">Filtro rápido</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="segmento" className="mt-3 space-y-1">
+                <Popover open={segmentoOpen} onOpenChange={setSegmentoOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between font-normal"
+                      disabled={loadingSeg || segmentos.length === 0}
+                    >
+                      {segSelecionado ? (
+                        <span className="inline-flex items-center gap-2 truncate">
+                          <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ background: segSelecionado.cor }} />
+                          {segSelecionado.nome}
+                          <span className="text-muted-foreground">({segSelecionado.total_cache})</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {loadingSeg ? "Carregando segmentos..." : segmentos.length === 0 ? "Nenhum segmento cadastrado" : "Escolha um segmento..."}
+                        </span>
+                      )}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar segmento..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhum segmento encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {segmentos.map((s) => (
+                            <CommandItem
+                              key={s.id}
+                              value={`${s.nome} ${s.descricao ?? ""}`}
+                              onSelect={() => { setSegmentoId(s.id); setSegmentoOpen(false); }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", segmentoId === s.id ? "opacity-100" : "opacity-0")} />
+                              <span className="inline-block h-2 w-2 rounded-full mr-2 shrink-0" style={{ background: s.cor }} />
+                              <span className="flex-1 truncate">{s.nome}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">{s.total_cache}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {!loadingSeg && segmentos.length === 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Você ainda não tem segmentos.{" "}
+                    <Link to="/app/political/segmentation" className="text-primary underline" onClick={() => onOpenChange(false)}>
+                      Criar segmento
+                    </Link>
+                  </p>
+                )}
+              </TabsContent>
+
+              <TabsContent value="filtro" className="mt-3 space-y-3">
+                <MultiSelect label="Bairros" options={opcoes.bairros.map((b) => ({ value: b, label: b }))} selected={filtros.bairros ?? []} onToggle={(v) => toggleArr("bairros", v)} />
+                <MultiSelect label="Cidades" options={opcoes.cidades.map((c) => ({ value: c, label: c }))} selected={filtros.cidades ?? []} onToggle={(v) => toggleArr("cidades", v)} />
+                <MultiSelect label="Tags" options={opcoes.tags.map((t) => ({ value: t.id, label: t.nome, color: t.cor }))} selected={filtros.tags ?? []} onToggle={(v) => toggleArr("tags", v)} />
+                <MultiSelect label="Origens (departamentos)" options={opcoes.origens.map((o) => ({ value: o, label: o }))} selected={filtros.origens ?? []} onToggle={(v) => toggleArr("origens", v)} />
+              </TabsContent>
+            </Tabs>
           </div>
           <div>
             <Label>Conteúdo</Label>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, NavLink, useLocation } from "react-router-dom";
+import { useCompany } from "@/modules/settings/contexts/CompanyContext";
 import {
   LayoutGrid,
   Settings,
@@ -15,6 +16,7 @@ import {
   UserCog,
   ShieldCheck,
   Activity,
+  AlertTriangle,
   Share2,
   Database,
   Webhook,
@@ -43,7 +45,9 @@ import {
   MessageSquare,
   Smartphone,
   Plug,
-  LayoutDashboard,
+   LayoutDashboard,
+   Package,
+   ScanSearch,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -67,8 +71,17 @@ import { authService } from "@/modules/auth/services/authService";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { usePendentesCount } from "@/modules/atendimento/hooks/usePendentesCount";
+import { canAccessRoute } from "@/shared/auth/routePermissions";
 
-type Sub = { title: string; url: string; icon: LucideIcon };
+type Sub = {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  external?: boolean;
+  // Quando presente, este "sub" se comporta como um folder aninhado (3º nível).
+  subs?: Sub[];
+  key?: string;
+};
 type SubFolder = { title: string; key: string; icon: LucideIcon; subs: Sub[] };
 type Item = {
   title: string;
@@ -80,26 +93,72 @@ type Item = {
 };
 
 const main: Item[] = [
-  { title: "Dashboard", url: "/app/dashboard", icon: LayoutGrid },
+   { title: "Painel", url: "/app/dashboard", icon: LayoutGrid },
   {
-    title: "Configurações",
-    url: "/app/hub/configuracoes",
-    icon: Settings,
+    title: "Gestão de Eleitores",
+    url: "/app/analise-de-eleitores",
+    icon: Users,
     subs: [
-      { title: "Empresas", url: "/app/settings/companies", icon: Building2 },
-      { title: "Usuários", url: "/app/settings/users", icon: UserCog },
-      { title: "Perfis & RBAC", url: "/app/settings/profiles", icon: ShieldCheck },
-      { title: "Integrações", url: "/app/integracoes", icon: Share2 },
-      { title: "Webhooks", url: "/app/webhooks", icon: Webhook },
-      { title: "Backup", url: "/app/backup", icon: Database },
-      { title: "Notificações", url: "/app/notificacoes", icon: Bell },
-      { title: "Auditoria", url: "/app/auditoria", icon: Activity },
-      { title: "Geral", url: "/app/configuracoes", icon: Settings2 },
+      { title: "Dashboard", url: "/app/analise-de-eleitores", icon: LayoutDashboard },
+      { title: "Base de Eleitores", url: "/app/analise-de-eleitores/base", icon: Users },
+      { title: "Lideranças", url: "/app/analise-de-eleitores/liderancas", icon: ShieldCheck },
+      { title: "Cabos Eleitorais", url: "/app/analise-de-eleitores/cabos", icon: Megaphone },
+      { title: "Departamentos", url: "/app/political/departments", icon: Building2 },
+    ],
+  },
+  {
+    title: "Político",
+    url: "/app/political/dashboard",
+    icon: ScanSearch,
+    subFolders: [
+      {
+        title: "Visão Geral",
+        key: "ae-visao",
+        icon: BarChart3,
+        subs: [
+          { title: "Hierarquia & Ranking", url: "/app/analise-de-eleitores/hierarquia", icon: BarChart3 },
+          { title: "Metas & Gamificação", url: "/app/analise-de-eleitores/metas-gamificacao", icon: Trophy },
+          { title: "Mapa Estratégico", url: "/app/analise-de-eleitores/mapa-estrategico", icon: MapPin },
+        ],
+      },
+      {
+        title: "Análise",
+        key: "ae-analise",
+        icon: BarChart2,
+        subs: [
+          { title: "Resultados TSE", url: "/app/analise-de-eleitores/resultados-tse", icon: BarChart3 },
+          { title: "Comparativo Eleições", url: "/app/analise-de-eleitores/comparativo-pos-eleicao", icon: Activity },
+          { title: "Campanha Estratégico", url: "/app/political/analise/campanha-estrategico", icon: TrendingUp },
+          { title: "Mapa Eleitoral", url: "/app/political/map", icon: MapPin },
+          {
+            title: "Validação Unificada",
+            url: "#",
+            icon: ShieldCheck,
+            key: "ae-validacao-unificada",
+            subs: [
+              { title: "Revisão Manual", url: "/app/analise-de-eleitores/revisao-manual", icon: ListChecks },
+              { title: "Duplicidades", url: "/app/analise-de-eleitores/duplicidades", icon: AlertTriangle },
+              { title: "Divergências", url: "/app/analise-de-eleitores/divergencias", icon: AlertTriangle },
+            ],
+          },
+        ],
+      },
+      {
+        title: "Gerenciamento Técnico",
+        key: "ae-tecnico",
+        icon: Settings2,
+        subs: [
+          { title: "Consultas & Custos API", url: "/app/analise-de-eleitores/consultas-custos", icon: Share2 },
+          { title: "Integrações", url: "/app/analise-de-eleitores/integracoes", icon: Plug },
+          { title: "Webhooks", url: "/app/analise-de-eleitores/webhooks", icon: Webhook },
+          { title: "Configurações Gerais", url: "/app/analise-de-eleitores/configuracoes", icon: Settings2 },
+        ],
+      },
     ],
   },
   {
     title: "WhatsApp",
-    url: "/app/hub/whatsapp",
+    url: "/app/whatsapp",
     icon: MessageCircle,
     badgeKey: "wa",
     subFolders: [
@@ -108,85 +167,156 @@ const main: Item[] = [
         key: "wa-zapi",
         icon: Smartphone,
         subs: [
+          // — Visão geral —
+          { title: "Conexões & Dispositivo", url: "/app/whatsapp/sessions", icon: Smartphone },
+
+          // — Operação diária —
           { title: "Atendimento", url: "/app/atendimento", icon: Inbox },
-          { title: "Comunicação", url: "/app/comunicacao", icon: MessageSquare },
+
+          // — Envio em massa —
           { title: "Campanhas", url: "/app/campanhas", icon: Megaphone },
-          { title: "Disparos", url: "/app/disparos", icon: Send },
-          { title: "Chatbot / URA", url: "/app/chatbot", icon: Bot },
-          { title: "Templates", url: "/app/atendimento/templates", icon: FileText },
-          { title: "Relatórios", url: "/app/atendimento/relatorios", icon: FileBarChart },
+
+          // — Automação & conteúdo —
+          { title: "Automações", url: "/app/automacoes-hub", icon: Bot },
+
+          // — Análise & ajustes —
+          { title: "Configurações", url: "/app/whatsapp/settings", icon: Settings2 },
         ],
       },
       {
-        title: "WhatsApp Oficial",
-        key: "wa-meta",
-        icon: Plug,
+        title: "Disparos API OFICIAL",
+        key: "wa-bulk",
+        icon: Send,
         subs: [
-          { title: "Conexão", url: "/app/wa-meta/connect", icon: Plug },
-          { title: "Sessões", url: "/app/wa-meta/sessions", icon: Smartphone },
-          { title: "Dashboard", url: "/app/wa-meta/dashboard", icon: LayoutDashboard },
-          { title: "Configurações", url: "/app/atendimento/configuracoes-avancadas", icon: Settings2 },
+          { title: "Dashboard", url: "/app/whatsapp-bulk/dashboard", icon: LayoutDashboard },
+          { title: "Conexões / APIs", url: "/app/whatsapp-bulk/apis", icon: Smartphone },
+          { title: "Templates", url: "/app/whatsapp-bulk/templates", icon: FileText },
+          { title: "Campanhas", url: "/app/whatsapp-bulk/campanhas", icon: Megaphone },
+          { title: "Atendimento", url: "/app/whatsapp-bulk/atendimento", icon: Inbox },
+          { title: "Fila de Envios", url: "/app/whatsapp-bulk/fila", icon: ListChecks },
+          { title: "Configurações", url: "/app/whatsapp-bulk/configuracoes", icon: Settings2 },
         ],
       },
     ],
   },
   {
-    title: "Tickets",
-    url: "/app/hub/tickets",
-    icon: Inbox,
+    title: "Relatórios",
+    url: "/app/relatorios",
+    icon: FileBarChart,
+  },
+   {
+     title: "Tickets",
+     url: "/app/tickets/list",
+     icon: Inbox,
+   },
+  {
+    title: "Eventos",
+    url: "/app/eventos",
+    icon: Calendar,
     subs: [
-      { title: "Dashboard", url: "/app/tickets/dashboard", icon: LayoutDashboard },
-      { title: "Chamados", url: "/app/tickets/list", icon: ListChecks },
-      { title: "Agenda", url: "/app/tickets/calendar", icon: CalendarDays },
-      { title: "Filas", url: "/app/tickets/queues", icon: Zap },
-      { title: "Categorias", url: "/app/tickets/categories", icon: Tag },
-      { title: "SLA", url: "/app/tickets/sla", icon: ShieldCheck },
-      { title: "Configurações", url: "/app/tickets/settings", icon: Settings2 },
+      { title: "Visão Geral", url: "/app/eventos", icon: BarChart3 },
+      { title: "Agenda / Eventos", url: "/app/political/agenda-eventos", icon: CalendarDays },
+      { title: "Pesquisas", url: "/app/political/polls", icon: ListChecks },
+      { title: "Aniversariantes", url: "/app/political/birthdays", icon: Cake },
     ],
   },
   {
-    title: "Político",
-    url: "/app/hub/politico",
-    icon: Vote,
+    title: "Configurações",
+    url: "/app/hub/configuracoes",
+    icon: Settings,
     subs: [
-      { title: "Eleitores", url: "/app/political/voters", icon: Users },
-      { title: "Novo Eleitor", url: "/app/political/capture", icon: UserPlus },
-      { title: "CRM Eleitoral", url: "/app/political/crm", icon: Kanban },
-      { title: "Eventos", url: "/app/political/events", icon: Calendar },
-      { title: "Agenda", url: "/app/political/agenda", icon: CalendarDays },
-      { title: "Mapa Eleitoral", url: "/app/political/map", icon: MapPin },
-      { title: "Pesquisas", url: "/app/political/polls", icon: BarChart2 },
-      { title: "Aniversariantes", url: "/app/political/birthdays", icon: Cake },
-      { title: "Gamificação", url: "/app/political/gamification", icon: Trophy },
-      { title: "Predição", url: "/app/political/predictions", icon: TrendingUp },
-      { title: "Concorrência", url: "/app/political/competitors", icon: BarChart3 },
-      { title: "Segmentação", url: "/app/political/segmentation", icon: Filter },
-      { title: "Departamentos", url: "/app/political/departments", icon: Building2 },
-      { title: "Aprovações", url: "/app/aprovacoes", icon: ShieldCheck },
-      { title: "Relatórios", url: "/app/relatorios", icon: FileBarChart },
+      { title: "Empresas", url: "/app/settings/companies", icon: Building2 },
+      { title: "Usuários", url: "/app/settings/users", icon: UserCog },
+      { title: "Perfis & Permissões", url: "/app/settings/roles", icon: ShieldCheck },
+      { title: "Integrações", url: "/app/configuracoes?tab=integracoes", icon: Plug },
+      { title: "Formulário Público", url: "/cadastro-publico", icon: ExternalLink, external: true },
+      { title: "Backup", url: "/app/backup", icon: Database },
     ],
   },
 ];
 
 const account = [
   { title: "Meu Perfil", url: "/app/perfil", icon: UserCircle },
-  { title: "Formulário Público", url: "/cadastro-publico", icon: ExternalLink, external: true },
 ];
 
 const STORAGE_KEY = "sa:sidebar:open";
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { data: pendentes = 0 } = usePendentesCount();
+  const { isSuperAdmin, hasPermission, loading: companyLoading, switching } = useCompany();
+
+  // Mantém apenas itens (e folders/subs) cujo usuário tem permissão.
+  const canAccess = (url: string, external?: boolean) =>
+    canAccessRoute(url, hasPermission, isSuperAdmin, external);
+
+  const filterItems = (items: Item[]): Item[] =>
+    items
+      .map((it) => {
+        const filterSubs = (subs?: Sub[]): Sub[] | undefined =>
+          subs
+            ?.map((s) => {
+              if (s.subs) {
+                const nested = filterSubs(s.subs);
+                if (!nested || nested.length === 0) return null;
+                return { ...s, subs: nested } as Sub;
+              }
+              return canAccess(s.url, s.external) ? s : null;
+            })
+            .filter((s): s is Sub => s !== null);
+        const subs = filterSubs(it.subs);
+        const subFolders = it.subFolders
+          ?.map((f) => ({ ...f, subs: filterSubs(f.subs) ?? [] }))
+          .filter((f) => f.subs.length > 0);
+        const itemAllowed = canAccess(it.url);
+        const hasChildren = (subs && subs.length > 0) || (subFolders && subFolders.length > 0);
+        // Se o item tem filhos definidos, só mantém se ainda restar algum filho permitido.
+        if (it.subs || it.subFolders) {
+          if (!hasChildren) return null;
+          return { ...it, subs, subFolders };
+        }
+        return itemAllowed ? it : null;
+      })
+      .filter((x): x is Item => x !== null);
+
+  const mainNavBase = isSuperAdmin
+    ? main.map((g) =>
+        g.title === "Político"
+          ? {
+              ...g,
+              subFolders: (g.subFolders ?? []).map((f) =>
+                f.key === "ae-tecnico"
+                  ? {
+                      ...f,
+                      subs: [
+                        ...f.subs,
+                        { title: "Performance & Filas", url: "/app/analise-de-eleitores/performance", icon: Activity },
+                        { title: "Homologação & Testes", url: "/app/analise-de-eleitores/homologacao", icon: ShieldCheck },
+                        { title: "Financeiro (Super Admin)", url: "/app/analise-de-eleitores/financeiro-admin", icon: BarChart3 },
+                      ],
+                    }
+                  : f,
+              ),
+            }
+          : g,
+      )
+    : main;
+  // Durante carregamento inicial OU troca de empresa, não renderizamos
+  // nenhum item — evita flicker e cliques em rotas da empresa anterior.
+  const navBlocked = switching || (companyLoading && !isSuperAdmin);
+  const mainNav = navBlocked ? [] : filterItems(mainNavBase);
 
   const isActive = (path: string) => pathname === path || pathname.startsWith(path + "/");
+  const subActive = (sub: Sub): boolean =>
+    (sub.url !== "#" && isActive(sub.url)) ||
+    (sub.subs?.some((s) => subActive(s)) ?? false);
   const groupActive = (item: Item) =>
     isActive(item.url) ||
-    (item.subs?.some((s) => isActive(s.url)) ?? false) ||
-    (item.subFolders?.some((f) => f.subs.some((s) => isActive(s.url))) ?? false);
+    (item.subs?.some((s) => subActive(s)) ?? false) ||
+    (item.subFolders?.some((f) => f.subs.some((s) => subActive(s))) ?? false);
 
   const [open, setOpen] = useState<Record<string, boolean>>(() => {
     try {
@@ -201,16 +331,22 @@ export function AppSidebar() {
     setOpen((prev) => {
       const next = { ...prev };
       let changed = false;
-      main.forEach((item) => {
+      mainNav.forEach((item) => {
         if ((item.subs || item.subFolders) && groupActive(item) && !next[item.title]) {
           next[item.title] = true;
           changed = true;
         }
         item.subFolders?.forEach((f) => {
-          if (f.subs.some((s) => isActive(s.url)) && !next[f.key]) {
+          if (f.subs.some((s) => subActive(s)) && !next[f.key]) {
             next[f.key] = true;
             changed = true;
           }
+          f.subs.forEach((s) => {
+            if (s.subs && s.subs.some((i) => isActive(i.url))) {
+              const k = s.key ?? `${f.key}-${s.title}`;
+              if (!next[k]) { next[k] = true; changed = true; }
+            }
+          });
         });
       });
       return changed ? next : prev;
@@ -221,6 +357,12 @@ export function AppSidebar() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(open));
   }, [open]);
+
+  // Fecha o overlay do sidebar automaticamente ao navegar no mobile
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, isMobile]);
 
   const toggle = (key: string) => setOpen((p) => ({ ...p, [key]: !p[key] }));
 
@@ -266,8 +408,8 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {main.map((item) => {
-                const showBadge = item.badgeKey === "wa" && pendentes > 0 && !collapsed;
+              {mainNav.map((item) => {
+                const showBadge = !!item.badgeKey && !collapsed && pendentes > 0;
                 // Item sem subs (Dashboard) — link direto
                 if (!item.subs && !item.subFolders) {
                   return (
@@ -345,18 +487,18 @@ export function AppSidebar() {
                               <SidebarMenuSubButton
                                 asChild
                                 isActive={isActive(sub.url)}
-                                className="h-9 pl-7 pr-3 text-muted-foreground hover:bg-muted/60 hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-primary data-[active=true]:font-medium"
+                                className="min-h-8 h-auto py-1.5 pl-6 pr-3 items-start !overflow-visible text-[12.5px] font-medium text-sidebar-foreground/85 hover:bg-muted hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-primary data-[active=true]:font-semibold [&>span:last-child]:!truncate-none [&>span:last-child]:!whitespace-normal [&>span:last-child]:!overflow-visible"
                               >
                                 <NavLink to={sub.url}>
-                                  <sub.icon className="h-3.5 w-3.5" />
-                                  <span className="truncate text-[13px]">{sub.title}</span>
+                                  <sub.icon className="h-3.5 w-3.5 shrink-0 mt-[3px]" />
+                                  <span className="whitespace-normal break-words leading-snug">{sub.title}</span>
                                 </NavLink>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                           ))}
                           {item.subFolders?.map((folder) => {
                             const folderOpen = !!open[folder.key];
-                            const folderActive = folder.subs.some((s) => isActive(s.url));
+                            const folderActive = folder.subs.some((s) => subActive(s));
                             return (
                               <Collapsible
                                 key={folder.key}
@@ -367,10 +509,10 @@ export function AppSidebar() {
                                   <CollapsibleTrigger asChild>
                                     <SidebarMenuSubButton
                                       isActive={folderActive}
-                                      className="h-9 pl-7 pr-2 cursor-pointer text-muted-foreground hover:bg-muted/60 hover:text-foreground data-[active=true]:text-foreground data-[active=true]:font-medium"
+                                      className="min-h-8 h-auto py-1.5 pl-6 pr-2 items-start cursor-pointer !overflow-visible text-[12.5px] font-semibold text-sidebar-foreground/90 hover:bg-muted hover:text-foreground data-[active=true]:text-foreground [&>span:last-child]:!whitespace-normal [&>span:last-child]:!overflow-visible"
                                     >
-                                      <folder.icon className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="flex-1 truncate whitespace-nowrap text-[13px] font-medium">{folder.title}</span>
+                                      <folder.icon className="h-3.5 w-3.5 shrink-0 mt-[3px]" />
+                                      <span className="flex-1 whitespace-normal break-words leading-snug text-left">{folder.title}</span>
                                       {folderOpen ? (
                                         <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
                                       ) : (
@@ -380,20 +522,69 @@ export function AppSidebar() {
                                   </CollapsibleTrigger>
                                   <CollapsibleContent>
                                     <SidebarMenuSub className="ml-0 border-none pl-0 mt-0 gap-0">
-                                      {folder.subs.map((sub) => (
-                                        <SidebarMenuSubItem key={sub.url}>
-                                          <SidebarMenuSubButton
-                                            asChild
-                                            isActive={isActive(sub.url)}
-                                            className="h-8 pl-11 pr-3 text-muted-foreground/80 hover:bg-muted/40 hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-primary data-[active=true]:font-medium"
-                                          >
-                                            <NavLink to={sub.url}>
-                                              <sub.icon className="h-3 w-3 shrink-0" />
-                                              <span className="truncate text-[12.5px]">{sub.title}</span>
-                                            </NavLink>
-                                          </SidebarMenuSubButton>
-                                        </SidebarMenuSubItem>
-                                      ))}
+                                      {folder.subs.map((sub) => {
+                                        if (sub.subs && sub.subs.length > 0) {
+                                          const nestedKey = sub.key ?? `${folder.key}-${sub.title}`;
+                                          const nestedOpen = !!open[nestedKey];
+                                          const nestedActive = sub.subs.some((s) => subActive(s));
+                                          return (
+                                            <Collapsible
+                                              key={nestedKey}
+                                              open={nestedOpen}
+                                              onOpenChange={() => toggle(nestedKey)}
+                                            >
+                                              <SidebarMenuSubItem>
+                                                <CollapsibleTrigger asChild>
+                                                  <SidebarMenuSubButton
+                                                    isActive={nestedActive}
+                                                    className="min-h-7 h-auto py-1 pl-10 pr-2 items-start cursor-pointer !overflow-visible text-[12px] font-semibold text-sidebar-foreground/85 hover:bg-muted hover:text-foreground data-[active=true]:text-foreground [&>span:last-child]:!whitespace-normal [&>span:last-child]:!overflow-visible"
+                                                  >
+                                                    <sub.icon className="h-3 w-3 shrink-0 mt-[3px]" />
+                                                    <span className="flex-1 whitespace-normal break-words leading-snug text-left">{sub.title}</span>
+                                                    {nestedOpen ? (
+                                                      <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
+                                                    ) : (
+                                                      <ChevronRight className="h-3 w-3 shrink-0 opacity-70" />
+                                                    )}
+                                                  </SidebarMenuSubButton>
+                                                </CollapsibleTrigger>
+                                                <CollapsibleContent>
+                                                  <SidebarMenuSub className="ml-0 border-none pl-0 mt-0 gap-0">
+                                                    {sub.subs.map((inner) => (
+                                                      <SidebarMenuSubItem key={inner.url}>
+                                                        <SidebarMenuSubButton
+                                                          asChild
+                                                          isActive={isActive(inner.url)}
+                                                          className="min-h-7 h-auto py-1 pl-14 pr-3 items-start !overflow-visible text-[12px] text-sidebar-foreground/80 hover:bg-muted hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-primary data-[active=true]:font-semibold [&>span:last-child]:!whitespace-normal [&>span:last-child]:!overflow-visible"
+                                                        >
+                                                          <NavLink to={inner.url}>
+                                                            <inner.icon className="h-3 w-3 shrink-0 mt-[3px]" />
+                                                            <span className="whitespace-normal break-words leading-snug">{inner.title}</span>
+                                                          </NavLink>
+                                                        </SidebarMenuSubButton>
+                                                      </SidebarMenuSubItem>
+                                                    ))}
+                                                  </SidebarMenuSub>
+                                                </CollapsibleContent>
+                                              </SidebarMenuSubItem>
+                                            </Collapsible>
+                                          );
+                                        }
+                                        return (
+                                          <SidebarMenuSubItem key={sub.url}>
+                                            <SidebarMenuSubButton
+                                              asChild
+                                              isActive={isActive(sub.url)}
+                                              className="min-h-7 h-auto py-1 pl-10 pr-3 items-start !overflow-visible text-[12px] text-sidebar-foreground/80 hover:bg-muted hover:text-foreground data-[active=true]:bg-accent data-[active=true]:text-primary data-[active=true]:font-semibold [&>span:last-child]:!whitespace-normal [&>span:last-child]:!overflow-visible"
+                                            >
+                                              <NavLink to={sub.url}>
+                                                <sub.icon className="h-3 w-3 shrink-0 mt-[3px]" />
+                                                <span className="whitespace-normal break-words leading-snug">{sub.title}</span>
+                                              </NavLink>
+                                            </SidebarMenuSubButton>
+                                          </SidebarMenuSubItem>
+                                        );
+                                      })}
                                     </SidebarMenuSub>
                                   </CollapsibleContent>
                                 </SidebarMenuSubItem>
@@ -425,7 +616,7 @@ export function AppSidebar() {
                     className={itemClasses}
                     size="lg"
                   >
-                    <NavLink to={item.url} target={item.external ? "_blank" : undefined}>
+                    <NavLink to={item.url}>
                       <item.icon className="h-4 w-4" strokeWidth={2} />
                       <span className="text-[14px]">{item.title}</span>
                     </NavLink>

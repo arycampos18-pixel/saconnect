@@ -12,15 +12,22 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const ZAPI_INSTANCE_ID = Deno.env.get("ZAPI_INSTANCE_ID");
-    const ZAPI_INSTANCE_TOKEN = Deno.env.get("ZAPI_INSTANCE_TOKEN");
-    const ZAPI_CLIENT_TOKEN = Deno.env.get("ZAPI_CLIENT_TOKEN");
+    const getErrorMessage = (body: unknown) => {
+      if (typeof body === "string") return body;
+      if (body && typeof body === "object") {
+        const record = body as Record<string, unknown>;
+        const msg = record.error ?? record.message;
+        if (typeof msg === "string") return msg;
+      }
+      return "";
+    };
+    const isClientTokenNotAllowed = (body: unknown) => /Client-Token\s+.+\s+not allowed/i.test(getErrorMessage(body));
+
+    const ENV_INSTANCE_ID = Deno.env.get("ZAPI_INSTANCE_ID");
+    const ENV_INSTANCE_TOKEN = Deno.env.get("ZAPI_INSTANCE_TOKEN");
+    const ENV_CLIENT_TOKEN = Deno.env.get("ZAPI_CLIENT_TOKEN");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-    if (!ZAPI_INSTANCE_ID || !ZAPI_INSTANCE_TOKEN || !ZAPI_CLIENT_TOKEN) {
-      throw new Error("Credenciais Z-API ausentes (ZAPI_INSTANCE_ID/TOKEN/CLIENT_TOKEN)");
-    }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
@@ -41,6 +48,34 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // Resolve credenciais Z-API
+    let ZAPI_INSTANCE_ID = ENV_INSTANCE_ID ?? "";
+    let ZAPI_INSTANCE_TOKEN = ENV_INSTANCE_TOKEN ?? "";
+    let ZAPI_CLIENT_TOKEN = ENV_CLIENT_TOKEN ?? "";
+    try {
+      const { data: companyId } = await supabase.rpc("user_default_company", { _user_id: userData.user.id });
+      if (companyId) {
+        const { data: sess } = await supabase
+          .from("whatsapp_sessions").select("credentials")
+          .eq("company_id", companyId).eq("provider", "zapi")
+          .order("is_default", { ascending: false })
+          .order("created_at", { ascending: true })
+          .limit(1).maybeSingle();
+        const c = (sess?.credentials ?? {}) as Record<string, string>;
+        if (c.instance_id) ZAPI_INSTANCE_ID = c.instance_id.trim();
+        if (c.token) ZAPI_INSTANCE_TOKEN = c.token.trim();
+        if (c.client_token) {
+          const ct = c.client_token.trim();
+          if (/^[A-Za-z0-9]{20,}$/.test(ct)) ZAPI_CLIENT_TOKEN = ct;
+        }
+      }
+    } catch (_e) { /* fallback */ }
+    if (!ZAPI_INSTANCE_ID || !ZAPI_INSTANCE_TOKEN || !ZAPI_CLIENT_TOKEN) {
+      return new Response(JSON.stringify({ error: "Credenciais Z-API ausentes (cadastre uma conexão Z-API)" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json();
     const { to, message, nome } = body as { to?: string; message?: string; nome?: string };
 
@@ -51,21 +86,73 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Z-API exige número apenas com dígitos (DDI+DDD+numero)
-    const phone = to.replace(/\D/g, "");
+    // Z-API exige número apenas com dígitos (DDI+DDD+numero).
+    // Normaliza para o formato brasileiro: se vier sem o DDI 55 (10 ou 11 dígitos), prefixa.
+    const normalizePhoneBR = (raw: string) => {
+      const d = raw.replace(/\D/g, "");
+      if (d.length === 10 || d.length === 11) return `55${d}`;
+      if (d.length === 12 || d.length === 13) return d;
+      return d;
+    };
+    const phone = normalizePhoneBR(to);
+
+    // Verifica se o número tem WhatsApp ativo antes de enviar (evita "Enviado" silencioso).
+    try {
+      const existsResp = await fetch(
+        `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/phone-exists/${phone}`,
+        { method: "GET", headers: { "Client-Token": ZAPI_CLIENT_TOKEN } },
+      );
+      const existsData = await existsResp.json().catch(() => ({} as Record<string, unknown>));
+      const exists = (existsData as Record<string, unknown>)?.exists;
+      if (existsResp.ok && exists === false) {
+        await supabase.from("mensagens_externas").insert({
+          user_id: userData.user.id,
+          canal: "WhatsApp",
+          destinatario: to,
+          destinatario_nome: nome ?? null,
+          conteudo: message,
+          status: "Falhou",
+          provedor: "Z-API",
+          erro: "Número não possui WhatsApp ativo",
+          metadata: { phone_exists: existsData },
+        });
+        return new Response(
+          JSON.stringify({
+            error: "Este número não possui WhatsApp ativo (verifique o DDI/DDD).",
+            details: existsData,
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    } catch (_e) {
+      // Se a verificação falhar por instabilidade, segue o envio normal.
+    }
 
     const url = `https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_INSTANCE_TOKEN}/send-text`;
 
-    const zapiResp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Client-Token": ZAPI_CLIENT_TOKEN,
-      },
-      body: JSON.stringify({ phone, message }),
-    });
+    const sendText = async (instanceId: string, instanceToken: string, clientToken: string) => {
+      const response = await fetch(`https://api.z-api.io/instances/${instanceId}/token/${instanceToken}/send-text`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Client-Token": clientToken,
+        },
+        body: JSON.stringify({ phone, message }),
+      });
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    };
 
-    const zapiData = await zapiResp.json().catch(() => ({}));
+    let { response: zapiResp, data: zapiData } = await sendText(ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN);
+
+    const canRetryWithEnv = !!ENV_INSTANCE_ID && !!ENV_INSTANCE_TOKEN && !!ENV_CLIENT_TOKEN
+      && (ENV_INSTANCE_ID !== ZAPI_INSTANCE_ID || ENV_INSTANCE_TOKEN !== ZAPI_INSTANCE_TOKEN || ENV_CLIENT_TOKEN !== ZAPI_CLIENT_TOKEN);
+
+    if (!zapiResp.ok && isClientTokenNotAllowed(zapiData) && canRetryWithEnv) {
+      const retried = await sendText(ENV_INSTANCE_ID!, ENV_INSTANCE_TOKEN!, ENV_CLIENT_TOKEN!);
+      zapiResp = retried.response;
+      zapiData = retried.data;
+    }
 
     if (!zapiResp.ok) {
       await supabase.from("mensagens_externas").insert({
@@ -79,8 +166,11 @@ Deno.serve(async (req: Request) => {
         erro: zapiData?.error || zapiData?.message || JSON.stringify(zapiData),
         metadata: { response: zapiData },
       });
+      const errorMessage = isClientTokenNotAllowed(zapiData)
+        ? "Client-Token da conexão Z-API não está autorizado para esta instância. Atualize o token da conexão cadastrada em WhatsApp > Sessões ou os secrets globais da Z-API."
+        : `Z-API [${zapiResp.status}]: ${zapiData?.error || zapiData?.message || "erro"}`;
       return new Response(
-        JSON.stringify({ error: `Z-API [${zapiResp.status}]: ${zapiData?.error || zapiData?.message || "erro"}` }),
+        JSON.stringify({ error: errorMessage, details: zapiData }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

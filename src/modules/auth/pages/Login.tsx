@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Vote, Mail, Lock, ArrowRight, AlertCircle } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Vote, Mail, Lock, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ const MIN_SUBMIT_INTERVAL_MS = 1200;
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { session, profile, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,21 +35,68 @@ export default function Login() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [stuckTooLong, setStuckTooLong] = useState(false);
+
+  // Mensagens contextuais quando o utilizador chega aqui por logout forçado
+  useEffect(() => {
+    const reason = searchParams.get("reason");
+    if (!reason) return;
+    if (reason === "idle") {
+      toast.warning("Sua sessão expirou por inatividade. Faça login novamente.");
+    } else if (reason === "replaced") {
+      toast.error("Sessão encerrada: o seu usuário entrou em outro dispositivo.");
+    } else if (reason === "revoked") {
+      toast.error("Sua sessão foi encerrada por segurança. Faça login novamente.");
+    }
+    // limpa o param para não repetir
+    const next = new URLSearchParams(searchParams);
+    next.delete("reason");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     authLog("info", "login.mount", {
       authLoading,
       hasSession: !!session,
       profileAtivo: profile?.ativo,
+      url: typeof window !== "undefined" ? window.location.href : undefined,
+      ua: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
     });
-  }, []);
+    // Detecta se a tela ficou pendurada em "loading" por muito tempo
+    const stuckTimer = setTimeout(() => {
+      if (authLoading) {
+        authLog("warn", "login.boot_stuck", { authLoading });
+        setStuckTooLong(true);
+      }
+    }, 8000);
+    // Captura erros globais durante a montagem da tela
+    const onError = (e: ErrorEvent) => {
+      authLog("error", "login.window_error", {
+        message: e?.message,
+        filename: e?.filename,
+        lineno: e?.lineno,
+      });
+      setBootError("Ocorreu um erro ao carregar a tela de login. Tente recarregar a página.");
+    };
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const reason = (e?.reason && (e.reason.message || String(e.reason))) || "unknown";
+      authLog("error", "login.unhandled_rejection", { reason: String(reason) });
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      clearTimeout(stuckTimer);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading]);
 
-  useEffect(() => {
-    if (!authLoading && session && isSessionValid(session) && profile?.ativo !== false) {
-      authLog("info", "login.redirect_to_app", { userId: session.user?.id });
-      navigate("/app", { replace: true });
-    }
-  }, [authLoading, session, profile, navigate]);
+   // O redirect automático para /app caso logado é lidado pelo PublicRoute no App.tsx.
+   // Removendo este useEffect para evitar loops ou redirecionamentos indesejados
+   // enquanto o estado de carregamento do AuthProvider/PublicRoute não estabiliza.
 
   // tick para countdown do bloqueio
   useEffect(() => {
@@ -81,10 +129,24 @@ export default function Login() {
     }
 
     setLoading(true);
-    const { error: authError } = await authService.signIn(parsed.data.email, parsed.data.password);
+    let authError: { message?: string } | null = null;
+    try {
+      const res = await authService.signIn(parsed.data.email, parsed.data.password);
+      authError = res.error ?? null;
+    } catch (err) {
+      authLog("error", "login.signin_exception", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      setLoading(false);
+      setError(
+        "Não foi possível conectar ao servidor de autenticação. Verifique sua conexão e tente novamente.",
+      );
+      return;
+    }
     setLoading(false);
 
     if (authError) {
+      authLog("warn", "login.signin_failed", { message: authError.message });
       // Mensagem genérica — não revela se o e-mail existe ou não
       const next = attempts + 1;
       setAttempts(next);
@@ -97,6 +159,7 @@ export default function Login() {
       return;
     }
 
+    authLog("info", "login.signin_success", { email: parsed.data.email });
     setAttempts(0);
     setLockedUntil(null);
     toast.success("Bem-vindo ao S A CONNECT!");
@@ -121,6 +184,26 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
+      {bootError && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-center">{bootError}</span>
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recarregar
+          </Button>
+        </div>
+      )}
+      {stuckTooLong && !bootError && (
+        <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
+          <AlertCircle className="h-4 w-4 shrink-0 text-warning" />
+          <span className="flex-1 text-center">
+            Conexão com o servidor está demorando mais que o normal. Verifique sua internet.
+          </span>
+          <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Recarregar
+          </Button>
+        </div>
+      )}
       {/* Painel esquerdo — branding */}
       <div className="relative hidden flex-1 flex-col justify-between overflow-hidden bg-gradient-hero p-12 text-primary-foreground lg:flex">
         <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary-glow/30 blur-3xl" />

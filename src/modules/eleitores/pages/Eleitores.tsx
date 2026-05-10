@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Filter, Plus, Download, Loader2 } from "lucide-react";
+import { Search, Filter, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,8 @@ import { catalogosService, type Tag } from "@/modules/eleitores/services/catalog
 import { EleitorDetailSheet } from "@/modules/eleitores/components/EleitorDetailSheet";
 import { downloadCSV, toCSV } from "@/shared/utils/csv";
 import { formatPhoneBR } from "@/shared/utils/phone";
+import { liderancasCabosService, type Lideranca, type Cabo } from "@/modules/political/services/liderancasCabosService";
+import { NovoEleitorMenu } from "@/modules/eleitores/components/NovoEleitorMenu";
 
 const PAGE_SIZE = 10;
 
@@ -26,24 +28,32 @@ export default function Eleitores() {
   const [search, setSearch] = useState("");
   const [bairro, setBairro] = useState("todos");
   const [tag, setTag] = useState("todas");
+  const [liderancaId, setLiderancaId] = useState("todas");
+  const [caboId, setCaboId] = useState("todos");
   const [page, setPage] = useState(1);
   const [selecionado, setSelecionado] = useState<EleitorComRelacoes | null>(null);
   const [eleitores, setEleitores] = useState<EleitorComRelacoes[]>([]);
   const [bairros, setBairros] = useState<string[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [liderancas, setLiderancas] = useState<Lideranca[]>([]);
+  const [cabos, setCabos] = useState<Cabo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const carregar = async () => {
     setLoading(true);
     try {
-      const [els, bs, ts] = await Promise.all([
-        eleitoresService.list({ search, bairro, tagId: tag }),
+      const [els, bs, ts, lids, cbs] = await Promise.all([
+        eleitoresService.list({ search, bairro, tagId: tag, liderancaId, caboId }),
         catalogosService.bairros(),
         catalogosService.tags(),
+        liderancasCabosService.listarLiderancas().catch(() => []),
+        liderancasCabosService.listarCabos().catch(() => []),
       ]);
       setEleitores(els);
       setBairros(bs);
       setTags(ts);
+      setLiderancas(lids);
+      setCabos(cbs);
     } catch (e: any) {
       toast.error("Erro ao carregar eleitores: " + e.message);
     } finally {
@@ -54,7 +64,7 @@ export default function Eleitores() {
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, bairro, tag]);
+  }, [search, bairro, tag, liderancaId, caboId]);
 
   const totalPages = Math.max(1, Math.ceil(eleitores.length / PAGE_SIZE));
   const pageItems = useMemo(
@@ -106,13 +116,7 @@ export default function Eleitores() {
           <Button variant="outline" size="sm" onClick={exportar} disabled={loading || eleitores.length === 0}>
             <Download className="mr-1.5 h-4 w-4" /> Exportar
           </Button>
-          <Button
-            onClick={() => navigate("/app/captacao")}
-            size="sm"
-            className="bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
-          >
-            <Plus className="mr-1.5 h-4 w-4" /> Novo Eleitor
-          </Button>
+          <NovoEleitorMenu />
         </div>
       </div>
 
@@ -151,19 +155,43 @@ export default function Eleitores() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={liderancaId} onValueChange={(v) => { setLiderancaId(v); setCaboId("todos"); setPage(1); }}>
+              <SelectTrigger className="h-10 w-[180px]">
+                <SelectValue placeholder="Liderança" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as lideranças</SelectItem>
+                {liderancas.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={caboId} onValueChange={(v) => { setCaboId(v); setPage(1); }}>
+              <SelectTrigger className="h-10 w-[180px]">
+                <SelectValue placeholder="Cabo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os cabos</SelectItem>
+                {cabos
+                  .filter((c) => liderancaId === "todas" || c.lideranca_id === liderancaId)
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <Table>
+        <div className="overflow-x-auto -mx-px">
+          <Table className="min-w-[640px]">
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
-                <TableHead>Nome</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead className="hidden md:table-cell">Bairro</TableHead>
-                <TableHead className="hidden lg:table-cell">Liderança</TableHead>
-                <TableHead className="hidden lg:table-cell">Origem</TableHead>
-                <TableHead>Tags</TableHead>
+                <TableHead className="whitespace-nowrap">Nome</TableHead>
+                <TableHead className="whitespace-nowrap">Telefone</TableHead>
+                <TableHead className="hidden md:table-cell whitespace-nowrap">Bairro</TableHead>
+                <TableHead className="hidden lg:table-cell whitespace-nowrap">Liderança</TableHead>
+                <TableHead className="hidden lg:table-cell whitespace-nowrap">Origem</TableHead>
+                <TableHead className="min-w-[140px]">Tags</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -192,13 +220,13 @@ export default function Eleitores() {
                     onClick={() => setSelecionado(e)}
                     className="cursor-pointer border-border transition-colors hover:bg-secondary/60"
                   >
-                    <TableCell className="font-medium">{e.nome}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatPhoneBR(e.telefone)}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">{e.bairro ?? "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                    <TableCell className="font-medium whitespace-nowrap">{e.nome}</TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">{formatPhoneBR(e.telefone)}</TableCell>
+                    <TableCell className="hidden md:table-cell whitespace-nowrap text-muted-foreground">{e.bairro ?? "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell whitespace-nowrap text-muted-foreground">
                       {e.lideranca?.nome ?? "—"}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell className="hidden lg:table-cell whitespace-nowrap">
                       <Badge variant="secondary" className="font-normal">{e.origem}</Badge>
                     </TableCell>
                     <TableCell>

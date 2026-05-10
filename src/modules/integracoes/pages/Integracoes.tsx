@@ -27,6 +27,7 @@ import {
 import { integracoesService, type MensagemStatus, type PostStatus } from "../services/integracoesService";
 import { EnviarMensagemDialog } from "../components/EnviarMensagemDialog";
 import { NovoPostDialog } from "../components/NovoPostDialog";
+import { WaBulkWebhookCard } from "../components/WaBulkWebhookCard";
 
 const statusMsgVariant: Record<MensagemStatus, string> = {
   Pendente: "bg-yellow-100 text-yellow-800",
@@ -144,6 +145,7 @@ export default function Integracoes() {
         <TabsList>
           <TabsTrigger value="mensagens">Mensagens</TabsTrigger>
           <TabsTrigger value="sociais">Redes sociais</TabsTrigger>
+          <TabsTrigger value="wa-bulk">Disparos API OFICIAL</TabsTrigger>
         </TabsList>
 
         <TabsContent value="mensagens" className="space-y-4">
@@ -255,6 +257,10 @@ export default function Integracoes() {
               </Card>
             ))}
           </div>
+        </TabsContent>
+
+        <TabsContent value="wa-bulk" className="space-y-4">
+          <WaBulkWebhookCard />
         </TabsContent>
       </Tabs>
 

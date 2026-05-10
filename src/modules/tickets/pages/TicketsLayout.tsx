@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, List, CalendarDays, ListTree, Tags, Timer, Settings } from "lucide-react";
+import { LayoutDashboard, List, ListTree, Tags, Timer, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { useCompany } from "@/modules/settings/contexts/CompanyContext";
@@ -7,7 +7,6 @@ import { useCompany } from "@/modules/settings/contexts/CompanyContext";
 const tabs = [
   { to: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "list", label: "Chamados", icon: List },
-  { to: "calendar", label: "Agenda", icon: CalendarDays },
   { to: "queues", label: "Filas", icon: ListTree },
   { to: "categories", label: "Categorias", icon: Tags },
   { to: "sla", label: "SLA", icon: Timer },

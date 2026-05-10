@@ -20,27 +20,29 @@ const variants = {
 
 export function MetricCard({ title, value, icon: Icon, trend, variant = "primary" }: Props) {
   return (
-    <div className="group card-glass animate-fade-in-up p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
-          <p className="text-[13px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{title}</p>
-          <p className="font-[Poppins,Inter,sans-serif] text-[32px] font-bold leading-none tracking-[-0.02em] text-foreground">
+    <div className="group card-glass animate-fade-in-up p-4 sm:p-5 md:p-6 h-full">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
+          <p className="text-[11px] sm:text-[12px] md:text-[13px] font-medium uppercase tracking-[0.06em] text-muted-foreground line-clamp-2">
+            {title}
+          </p>
+          <p className="font-[Poppins,Inter,sans-serif] text-[24px] sm:text-[26px] md:text-[30px] lg:text-[32px] font-bold leading-none tracking-[-0.02em] text-foreground">
             {value}
           </p>
           {trend && (
-            <div className="flex items-center gap-1 pt-0.5 text-xs font-medium text-success">
-              <TrendingUp className="h-3 w-3" />
-              {trend}
+            <div className="flex items-center gap-1 pt-0.5 text-[11px] sm:text-xs font-medium text-success">
+              <TrendingUp className="h-3 w-3 shrink-0" />
+              <span className="truncate">{trend}</span>
             </div>
           )}
         </div>
         <div
           className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-110",
+            "flex h-9 w-9 sm:h-10 sm:w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-110",
             variants[variant],
           )}
         >
-          <Icon className="h-6 w-6" />
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6" />
         </div>
       </div>
     </div>

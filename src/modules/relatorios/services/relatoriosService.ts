@@ -79,7 +79,7 @@ export const relatoriosService = {
     ] = await Promise.all([
       supabase
         .from("eleitores")
-        .select("id, bairro, cidade, genero, origem, created_at, lideranca:liderancas(nome)")
+        .select("id, bairro, cidade, genero, origem, created_at, lideranca:liderancas!eleitores_lideranca_id_fkey(nome)")
         .order("created_at", { ascending: false })
         .limit(1000),
       supabase.from("eventos").select("id, nome, tipo, status, data_hora, local").limit(1000),

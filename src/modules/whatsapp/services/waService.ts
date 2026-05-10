@@ -25,6 +25,12 @@ export const waService = {
     const { error } = await (supabase as any).from('whatsapp_sessions').delete().eq('id', id);
     if (error) throw error;
   },
+  async updateSession(id: string, patch: Partial<WASession>) {
+    const { data, error } = await (supabase as any)
+      .from('whatsapp_sessions').update(patch).eq('id', id).select().single();
+    if (error) throw error;
+    return data as WASession;
+  },
 
   // ====== CONTACTS ======
   async listContacts(companyId: string): Promise<WAContact[]> {

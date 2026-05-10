@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type EventoTipo = "Saúde" | "Educação" | "Assistência" | "Jurídico" | "Cursos";
+export type EventoTipo = string;
 export type EventoStatus = "Planejado" | "Em Andamento" | "Finalizado";
 
 export type Evento = {

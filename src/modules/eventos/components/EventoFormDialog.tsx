@@ -6,16 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
-import { eventosService, type Evento, type EventoInput, type EventoStatus, type EventoTipo } from "../services/eventosService";
+import { eventosService, type Evento, type EventoInput, type EventoStatus } from "../services/eventosService";
 import { catalogosService, type Lideranca } from "@/modules/eleitores/services/catalogosService";
 import { Loader2 } from "lucide-react";
-
-const TIPOS: EventoTipo[] = ["Saúde", "Educação", "Assistência", "Jurídico", "Cursos"];
-const STATUS: EventoStatus[] = ["Planejado", "Em Andamento", "Finalizado"];
+import { DropdownComNovoCadastro } from "@/shared/components/forms/DropdownComNovoCadastro";
+import { supabase } from "@/integrations/supabase/client";
+import { useCatalogoCustomizado } from "@/shared/hooks/useCatalogoCustomizado";
 
 type Props = {
   open: boolean;
@@ -26,6 +23,8 @@ type Props = {
 
 export function EventoFormDialog({ open, onOpenChange, evento, onSaved }: Props) {
   const [liderancas, setLiderancas] = useState<Lideranca[]>([]);
+  const [tipos, setTipos] = useState<{ id: string; nome: string }[]>([]);
+  const statusCat = useCatalogoCustomizado("evento_status");
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<EventoInput>({
     nome: "",
@@ -41,6 +40,12 @@ export function EventoFormDialog({ open, onOpenChange, evento, onSaved }: Props)
   useEffect(() => {
     if (!open) return;
     catalogosService.liderancas().then(setLiderancas).catch(() => {});
+    supabase
+      .from("evento_tipos" as any)
+      .select("id, nome")
+      .eq("ativo", true)
+      .order("nome")
+      .then(({ data }) => setTipos(((data as any[]) ?? []).map((t) => ({ id: t.id, nome: t.nome }))));
     if (evento) {
       setForm({
         nome: evento.nome,
@@ -106,17 +111,39 @@ export function EventoFormDialog({ open, onOpenChange, evento, onSaved }: Props)
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>Tipo *</Label>
-              <Select value={form.tipo} onValueChange={(v) => setForm({ ...form, tipo: v as EventoTipo })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{TIPOS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="tipos_evento"
+                label="tipo"
+                opcoes={tipos}
+                value={tipos.find((t) => t.nome === form.tipo)?.id ?? null}
+                onChange={(id) => {
+                  const t = tipos.find((x) => x.id === id);
+                  if (t) setForm((f) => ({ ...f, tipo: t.nome }));
+                }}
+                placeholder="Selecionar tipo..."
+                onCreated={(item) => {
+                  setTipos((prev) => [...prev, { id: item.id, nome: item.nome }]);
+                  setForm((f) => ({ ...f, tipo: item.nome }));
+                }}
+              />
             </div>
             <div>
               <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as EventoStatus })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{STATUS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
+              <DropdownComNovoCadastro
+                campo="cat_evento_status"
+                label="status"
+                opcoes={statusCat.items}
+                value={statusCat.items.find((s) => s.nome === form.status)?.id ?? null}
+                onChange={(id) => {
+                  const s = statusCat.items.find((x) => x.id === id);
+                  if (s) setForm((f) => ({ ...f, status: s.nome as EventoStatus }));
+                }}
+                placeholder="Selecionar status..."
+                onCreated={(item) => {
+                  statusCat.addLocal({ id: item.id, nome: item.nome });
+                  setForm((f) => ({ ...f, status: item.nome as EventoStatus }));
+                }}
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -135,13 +162,18 @@ export function EventoFormDialog({ open, onOpenChange, evento, onSaved }: Props)
           </div>
           <div>
             <Label>Responsável (Liderança)</Label>
-            <Select value={form.responsavel_id ?? "nenhum"} onValueChange={(v) => setForm({ ...form, responsavel_id: v === "nenhum" ? null : v })}>
-              <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="nenhum">— Sem responsável —</SelectItem>
-                {liderancas.map((l) => <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <DropdownComNovoCadastro
+              campo="liderancas"
+              label="Liderança"
+              opcoes={liderancas.map((l) => ({ id: l.id, nome: l.nome }))}
+              value={form.responsavel_id}
+              onChange={(id) => setForm({ ...form, responsavel_id: id })}
+              emptyOptionLabel="— Sem responsável —"
+              placeholder="Selecionar..."
+              onCreated={(item) => {
+                setLiderancas((prev) => [...prev, { id: item.id, nome: item.nome } as Lideranca]);
+              }}
+            />
           </div>
           <div>
             <Label>Descrição</Label>

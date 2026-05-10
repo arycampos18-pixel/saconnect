@@ -19,8 +19,11 @@ import { catalogosService, type Tag } from "@/modules/eleitores/services/catalog
 import {
   comunicacaoService, type Mensagem,
 } from "@/modules/comunicacao/services/comunicacaoService";
+import { useCan } from "@/shared/auth/useCan";
 
 export default function Comunicacao() {
+  const { can } = useCan();
+  const podeEnviar = can("whatsapp.campanhas.view");
   const [bairro, setBairro] = useState("todos");
   const [tagId, setTagId] = useState("todas");
   const [mensagem, setMensagem] = useState("");
@@ -67,6 +70,9 @@ export default function Comunicacao() {
   }, [bairro, tagId, tags]);
 
   const enviar = async (canal: "WhatsApp" | "SMS") => {
+    if (!podeEnviar) {
+      return toast.error("Você não tem permissão para enviar comunicações.");
+    }
     if (!mensagem.trim()) return toast.error("Digite uma mensagem antes de enviar.");
     if (destinatarios === 0) return toast.error("Nenhum destinatário com consentimento LGPD.");
     setEnviando(true);
@@ -159,7 +165,8 @@ export default function Comunicacao() {
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <Button
                     onClick={() => enviar("WhatsApp")}
-                    disabled={enviando}
+                    disabled={enviando || !podeEnviar}
+                    title={!podeEnviar ? "Sem permissão para enviar" : undefined}
                     className="h-12 bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
                   >
                     {enviando ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <MessageSquare className="mr-2 h-5 w-5" />}
@@ -167,7 +174,8 @@ export default function Comunicacao() {
                   </Button>
                   <Button
                     onClick={() => enviar("SMS")}
-                    disabled={enviando}
+                    disabled={enviando || !podeEnviar}
+                    title={!podeEnviar ? "Sem permissão para enviar" : undefined}
                     variant="outline"
                     className="h-12 border-primary text-primary hover:bg-primary/10"
                   >

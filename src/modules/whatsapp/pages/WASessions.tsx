@@ -5,21 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useSearchParams } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Smartphone, Trash2, Copy, BadgeCheck, RefreshCw } from "lucide-react";
+import { Plus, Smartphone, Trash2, Copy, BadgeCheck, RefreshCw, Info, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTenantGate } from "../hooks/useTenantGate";
 import { waService } from "../services/waService";
+import { whatsappService } from "../services/whatsappService";
 import { supabase } from "@/integrations/supabase/client";
+import WAConnection from "./WAConnection";
 
 const WEBHOOK_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
 export default function WASessions() {
   const { companyId } = useTenantGate();
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "meta" ? "meta" : "zapi";
 
   if (!companyId) {
     return (
@@ -31,16 +29,7 @@ export default function WASessions() {
     );
   }
 
-  return (
-    <Tabs value={tab} onValueChange={(v) => setParams({ tab: v })} className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="zapi">WhatsApp</TabsTrigger>
-        <TabsTrigger value="meta">API Oficial</TabsTrigger>
-      </TabsList>
-      <TabsContent value="zapi"><ZapiTab companyId={companyId} /></TabsContent>
-      <TabsContent value="meta"><MetaTab companyId={companyId} /></TabsContent>
-    </Tabs>
-  );
+  return <ZapiTab companyId={companyId} />;
 }
 
 /* ============================================================
@@ -50,23 +39,35 @@ function ZapiTab({ companyId }: { companyId: string }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", instance_id: "", token: "", client_token: "" });
+  const [editing, setEditing] = useState<{ id: string; name: string; instance_id: string; token: string; client_token: string } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["wa", "sessions", companyId, "zapi"],
     queryFn: async () => (await waService.listSessions(companyId)).filter((s) => s.provider === "zapi"),
   });
 
+  function copy(text: string) {
+    navigator.clipboard.writeText(text);
+    toast.success("Copiado");
+  }
+
   async function handleCreate() {
     if (!form.name.trim()) return toast.error("Informe um nome");
+    const inst = form.instance_id.trim();
+    const tok = form.token.trim();
+    const ct = form.client_token.trim();
+    
+    if (!/^[A-Za-z0-9-_]{10,}$/.test(inst)) return toast.error("Instance ID inválido");
+    if (!/^[A-Za-z0-9-_]{10,}$/.test(tok)) return toast.error("Token inválido");
+    if (!/^[A-Za-z0-9-_]{10,}$/.test(ct)) return toast.error("Client Token inválido");
+
     try {
       await waService.createSession(companyId, {
         name: form.name.trim(),
         provider: "zapi",
-        credentials: {
-          instance_id: form.instance_id,
-          token: form.token,
-          client_token: form.client_token,
-        },
+        credentials: { instance_id: inst, token: tok, client_token: ct },
+        is_default: (data?.length ?? 0) === 0,
       } as any);
       toast.success("Conexão Z-API criada");
       setOpen(false);
@@ -83,69 +84,204 @@ function ZapiTab({ companyId }: { companyId: string }) {
     qc.invalidateQueries({ queryKey: ["wa", "sessions", companyId, "zapi"] });
   }
 
+  function openEdit(s: any) {
+    setEditing({
+      id: s.id,
+      name: s.name ?? "",
+      instance_id: s.credentials?.instance_id ?? "",
+      token: s.credentials?.token ?? "",
+      client_token: s.credentials?.client_token ?? "",
+    });
+  }
+
+  async function handleSaveEdit() {
+    if (!editing) return;
+    const inst = editing.instance_id.trim();
+    const tok = editing.token.trim();
+    const ct = editing.client_token.trim();
+    if (!/^[A-Za-z0-9-_]{10,}$/.test(inst)) return toast.error("Instance ID inválido");
+    if (!/^[A-Za-z0-9-_]{10,}$/.test(tok)) return toast.error("Token inválido");
+    if (!/^[A-Za-z0-9-_]{10,}$/.test(ct)) return toast.error("Client Token inválido");
+    setSavingEdit(true);
+    try {
+      await waService.updateSession(editing.id, {
+        name: editing.name.trim() || "Z-API",
+        credentials: { instance_id: inst, token: tok, client_token: ct },
+      } as any);
+      toast.success("Token atualizado. Validando com a Z-API...");
+      // Invalida e testa
+      await qc.invalidateQueries({ queryKey: ["wa", "sessions", companyId, "zapi"] });
+      try {
+        const st: any = await whatsappService.status();
+        if (st?.credentialsError) toast.error("Credenciais inválidas: " + (st.message ?? "verifique os tokens"));
+        else if (st?.connected) toast.success("✅ Token validado e WhatsApp conectado!");
+        else toast.warning("Token salvo. Instância desconectada — escaneie o QR Code.");
+      } catch (e: any) {
+        toast.error("Salvo, mas falhou ao validar: " + e.message);
+      }
+      qc.invalidateQueries({ queryKey: ["wa-status"] });
+      qc.invalidateQueries({ queryKey: ["whatsapp"] });
+      setEditing(null);
+    } catch (e: any) {
+      toast.error("Erro ao salvar: " + e.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div>
-          <CardTitle className="text-lg">WhatsApp</CardTitle>
-          <p className="text-sm text-muted-foreground">Conecte números via Z-API para atendimento e disparos</p>
-        </div>
-        <Button size="sm" onClick={() => setOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />Nova Conexão Z-API
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {isLoading && <div className="text-sm text-muted-foreground">Carregando…</div>}
-        {data?.length === 0 && (
-          <div className="text-sm text-muted-foreground">Nenhuma conexão Z-API. Clique em "Nova Conexão Z-API".</div>
-        )}
-        {data?.map((s) => (
-          <div key={s.id} className="flex items-center justify-between rounded-md border p-3">
-            <div className="flex items-center gap-3">
-              <Smartphone className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <div className="font-medium">{s.name}</div>
-                <div className="text-xs text-muted-foreground">{s.phone_number ?? "sem número"}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={s.status} />
-              <Button size="icon" variant="ghost" onClick={() => handleDelete(s.id)}>
-                <Trash2 className="h-4 w-4" />
+    <div className="space-y-4">
+      <WAConnection />
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-lg">Instâncias WhatsApp (Z-API)</CardTitle>
+            <p className="text-sm text-muted-foreground">Cadastre múltiplos números para atendimento e campanhas</p>
+          </div>
+          <Button size="sm" onClick={() => setOpen(true)} className="bg-primary hover:bg-primary/90">
+            <Plus className="mr-2 h-4 w-4" />Nova Conexão
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isLoading && <div className="text-sm text-muted-foreground animate-pulse py-4">Carregando instâncias…</div>}
+          
+          {data?.length === 0 && !isLoading && (
+            <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed rounded-lg bg-muted/5">
+              <Smartphone className="h-10 w-10 text-muted-foreground mb-3 opacity-20" />
+              <p className="text-sm text-muted-foreground mb-4">Nenhuma conexão ativa</p>
+              <Button onClick={() => setOpen(true)} variant="outline">
+                <Plus className="mr-2 h-4 w-4" /> Configurar Primeiro Número
               </Button>
             </div>
+          )}
+
+          {data?.map((s) => (
+            <div key={s.id} className="group flex items-center justify-between rounded-lg border p-4 bg-card hover:shadow-sm transition-all">
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Smartphone className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="font-semibold flex items-center gap-2">
+                    {s.name}
+                    {s.is_default && <Badge variant="outline" className="text-[10px] h-4">Padrão</Badge>}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono">
+                    ID: {s.credentials?.instance_id?.substring(0, 8)}... • {s.phone_number ?? "Aguardando conexão"}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={s.status} />
+                <Button size="sm" variant="outline" onClick={() => openEdit(s)} className="gap-1">
+                  <KeyRound className="h-3.5 w-3.5" /> Atualizar token
+                </Button>
+                <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 text-destructive transition-opacity" onClick={() => handleDelete(s.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Atualizar credenciais Z-API</DialogTitle>
+            <p className="text-sm text-muted-foreground">Cole os novos valores e salve. Validamos com a Z-API automaticamente.</p>
+          </DialogHeader>
+          {editing && (
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Nome</Label>
+                <Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Instance ID</Label>
+                <Input value={editing.instance_id} onChange={(e) => setEditing({ ...editing, instance_id: e.target.value })} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Instance Token</Label>
+                <Input value={editing.token} onChange={(e) => setEditing({ ...editing, token: e.target.value })} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Client Token (Account Security Token)</Label>
+                <Input value={editing.client_token} onChange={(e) => setEditing({ ...editing, client_token: e.target.value })} />
+                <p className="text-[10px] text-muted-foreground">Obrigatório para todas as chamadas Z-API.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditing(null)} disabled={savingEdit}>Cancelar</Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit}>
+              {savingEdit ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...</> : "Salvar e validar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Info className="h-4 w-4 text-primary" />
+            Configuração de Webhook
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Copie e cole a URL abaixo no painel da Z-API para receber mensagens em tempo real</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>URL do Webhook (Global)</Label>
+            <div className="flex gap-2">
+              <Input readOnly value={WEBHOOK_URL} className="font-mono text-xs bg-muted/50" />
+              <Button variant="outline" size="icon" onClick={() => copy(WEBHOOK_URL)}><Copy className="h-4 w-4" /></Button>
+            </div>
           </div>
-        ))}
-      </CardContent>
+          <div className="rounded-md bg-blue-50 p-3 text-xs text-blue-700 space-y-2 border border-blue-100">
+            <p className="font-bold uppercase tracking-wider">Passo a Passo na Z-API:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Acesse sua instância no painel da Z-API</li>
+              <li>Vá no menu <strong>Webhooks</strong></li>
+              <li>Cole a URL acima no campo <strong>URL do Webhook</strong></li>
+              <li>Ative os eventos: <strong>on-message-received</strong>, <strong>on-message-send</strong> e <strong>on-whatsapp-disconnected</strong></li>
+              <li>Clique em <strong>Salvar</strong></li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Nova Conexão Z-API</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Nome da Conexão</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Atendimento Principal" />
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Nova Conexão Z-API</DialogTitle>
+            <p className="text-sm text-muted-foreground">Insira as credenciais da sua instância Z-API</p>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name">Nome Amigável</Label>
+              <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: WhatsApp Vendas" />
             </div>
-            <div>
-              <Label>Instance ID</Label>
-              <Input value={form.instance_id} onChange={(e) => setForm({ ...form, instance_id: e.target.value })} />
+            <div className="grid gap-2">
+              <Label htmlFor="inst">Instance ID</Label>
+              <Input id="inst" value={form.instance_id} onChange={(e) => setForm({ ...form, instance_id: e.target.value })} placeholder="3B..." />
             </div>
-            <div>
-              <Label>Token</Label>
-              <Input value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
+            <div className="grid gap-2">
+              <Label htmlFor="tok">Instance Token</Label>
+              <Input id="tok" value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} placeholder="Token da Instância" />
             </div>
-            <div>
-              <Label>Client Token</Label>
-              <Input value={form.client_token} onChange={(e) => setForm({ ...form, client_token: e.target.value })} />
+            <div className="grid gap-2">
+              <Label htmlFor="ct">Client Token (Account Token)</Label>
+              <Input id="ct" value={form.client_token} onChange={(e) => setForm({ ...form, client_token: e.target.value })} placeholder="Faf..." />
+              <p className="text-[10px] text-muted-foreground">Segurança → Account Security Token no painel Z-API</p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate}>Salvar e Conectar</Button>
+            <Button onClick={handleCreate}>Salvar Conexão</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
 

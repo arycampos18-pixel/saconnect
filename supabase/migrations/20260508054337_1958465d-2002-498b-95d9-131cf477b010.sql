@@ -1,0 +1,1 @@
+ALTER VIEW public.eleicoes_resumo_municipios SET (security_invoker = on);

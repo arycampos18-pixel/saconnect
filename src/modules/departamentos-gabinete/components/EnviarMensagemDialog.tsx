@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Send, MessageSquare, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,21 @@ import { depStore } from "../store";
 import type { MembroDep, DepartamentoGab } from "../data/mock";
 
 type Canal = "WhatsApp" | "SMS" | "Email";
-type Alvo = "todos" | "ativos" | "membro";
+type Alvo =
+  | "todos"
+  | "ativos"
+  | "membro"
+  | "coordenadores"
+  | "voluntarios"
+  | "bairro"
+  | "tag";
+
+type EleitorAlvo = {
+  id: string;
+  nome: string;
+  telefone: string | null;
+  email?: string | null;
+};
 
 interface Props {
   open: boolean;
@@ -37,11 +51,82 @@ export function EnviarMensagemDialog({
   );
   const [enviando, setEnviando] = useState(false);
 
+  // Filtros para eleitores (bairro / tag)
+  const [bairros, setBairros] = useState<string[]>([]);
+  const [bairroSel, setBairroSel] = useState<string>("");
+  const [tags, setTags] = useState<{ id: string; nome: string }[]>([]);
+  const [tagSel, setTagSel] = useState<string>("");
+  const [eleitoresAlvo, setEleitoresAlvo] = useState<EleitorAlvo[]>([]);
+  const [carregandoEleitores, setCarregandoEleitores] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const [b, t] = await Promise.all([
+        supabase.from("eleitores").select("bairro").not("bairro", "is", null).limit(2000),
+        supabase.from("tags").select("id, nome").eq("ativo", true).order("nome"),
+      ]);
+      const set = new Set<string>();
+      (b.data ?? []).forEach((r: any) => {
+        const v = (r.bairro ?? "").trim();
+        if (v) set.add(v);
+      });
+      setBairros(Array.from(set).sort((a, z) => a.localeCompare(z)));
+      setTags((t.data ?? []) as any);
+    })();
+  }, [open]);
+
+  useEffect(() => {
+    if (alvo !== "bairro" && alvo !== "tag") { setEleitoresAlvo([]); return; }
+    if (alvo === "bairro" && !bairroSel) { setEleitoresAlvo([]); return; }
+    if (alvo === "tag" && !tagSel) { setEleitoresAlvo([]); return; }
+    let cancelled = false;
+    (async () => {
+      setCarregandoEleitores(true);
+      try {
+        if (alvo === "bairro") {
+          const { data } = await supabase
+            .from("eleitores")
+            .select("id, nome, telefone, email")
+            .eq("ativo", true)
+            .eq("bairro", bairroSel)
+            .limit(5000);
+          if (!cancelled) setEleitoresAlvo((data ?? []) as any);
+        } else {
+          const { data } = await supabase
+            .from("eleitor_tags")
+            .select("eleitor:eleitores!inner(id, nome, telefone, email, ativo)")
+            .eq("tag_id", tagSel)
+            .limit(5000);
+          if (!cancelled) {
+            const list = (data ?? [])
+              .map((r: any) => r.eleitor)
+              .filter((e: any) => e && e.ativo);
+            setEleitoresAlvo(list);
+          }
+        }
+      } finally {
+        if (!cancelled) setCarregandoEleitores(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [alvo, bairroSel, tagSel]);
+
   const destinatarios = useMemo(() => {
     if (alvo === "membro") return membros.filter((m) => m.id === membroId);
     if (alvo === "ativos") return membros.filter((m) => m.status === "Ativo");
+    if (alvo === "coordenadores") return membros.filter((m) => m.funcao === "Coordenador" && m.status === "Ativo");
+    if (alvo === "voluntarios") return membros.filter((m) => m.funcao === "Voluntário" && m.status === "Ativo");
+    if (alvo === "bairro" || alvo === "tag") {
+      return eleitoresAlvo.map((e) => ({
+        id: e.id,
+        nome: e.nome,
+        telefone: e.telefone ?? "",
+        email: e.email ?? undefined,
+      })) as unknown as MembroDep[];
+    }
     return membros;
-  }, [alvo, membroId, membros]);
+  }, [alvo, membroId, membros, eleitoresAlvo]);
 
   const validos = useMemo(
     () => destinatarios.filter((m) => (canal === "Email" ? !!m.email : !!m.telefone)),
@@ -140,7 +225,11 @@ export function EnviarMensagemDialog({
                 <SelectContent>
                   <SelectItem value="ativos">Apenas ativos</SelectItem>
                   <SelectItem value="todos">Todos os membros</SelectItem>
+                  <SelectItem value="coordenadores">Apenas coordenadores</SelectItem>
+                  <SelectItem value="voluntarios">Apenas voluntários</SelectItem>
                   <SelectItem value="membro">Membro específico</SelectItem>
+                  <SelectItem value="bairro">Eleitores por bairro</SelectItem>
+                  <SelectItem value="tag">Eleitores por tag</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -160,6 +249,38 @@ export function EnviarMensagemDialog({
             </div>
           )}
 
+          {alvo === "bairro" && (
+            <div>
+              <Label>Bairro</Label>
+              <Select value={bairroSel} onValueChange={setBairroSel}>
+                <SelectTrigger>
+                  <SelectValue placeholder={bairros.length ? "Selecione um bairro" : "Nenhum bairro disponível"} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {bairros.map((b) => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {alvo === "tag" && (
+            <div>
+              <Label>Tag</Label>
+              <Select value={tagSel} onValueChange={setTagSel}>
+                <SelectTrigger>
+                  <SelectValue placeholder={tags.length ? "Selecione uma tag" : "Nenhuma tag disponível"} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {tags.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label>Mensagem</Label>
             <Textarea
@@ -173,7 +294,9 @@ export function EnviarMensagemDialog({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs">
-            <Badge variant="secondary">{validos.length} válidos</Badge>
+            <Badge variant="secondary">
+              {carregandoEleitores ? "Carregando…" : `${validos.length} válidos`}
+            </Badge>
             {destinatarios.length !== validos.length && (
               <Badge variant="outline" className="text-muted-foreground">
                 {destinatarios.length - validos.length} sem {canal === "Email" ? "e-mail" : "telefone"}

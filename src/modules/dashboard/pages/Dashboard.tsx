@@ -23,6 +23,8 @@ import { RankingHierarquico } from "@/modules/dashboard/components/RankingHierar
 import { TopLiderancasChart } from "@/modules/dashboard/components/TopLiderancasChart";
 import { usePendentesCount } from "@/modules/atendimento/hooks/usePendentesCount";
 import { cn } from "@/lib/utils";
+import { useCompany } from "@/modules/settings/contexts/CompanyContext";
+import { canAccessRoute } from "@/shared/auth/routePermissions";
 
 const AreaTrendChart = lazy(() =>
   import("@/shared/components/charts/AreaTrendChart").then((m) => ({ default: m.AreaTrendChart })),
@@ -149,23 +151,26 @@ function VisaoPolitico({
   totalMeta: number;
   pctMeta: number;
 }) {
+  const { hasPermission, isSuperAdmin } = useCompany();
+  const metricCards = [
+    { to: "/app/eleitores", title: "Total de Eleitores", value: metricas.total.toLocaleString("pt-BR"), icon: Users, variant: "primary" as const },
+    { to: "/app/captacao", title: "Cadastros Hoje", value: metricas.hoje.toString(), icon: UserPlus, variant: "success" as const },
+    { to: "/app/cadastros", title: "Lideranças Ativas", value: ranking.length.toString(), icon: Layers, variant: "primary" as const },
+    { to: "/app/relatorios", title: "Meta do Mês", value: `${pctMeta}%`, icon: Target, trend: `${metricas.total}/${totalMeta}`, variant: "success" as const },
+  ].filter((card) => canAccessRoute(card.to, hasPermission, isSuperAdmin));
+
   return (
     <>
       {/* KPIs clicáveis */}
-      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
-        <Link to="/app/eleitores" className="block animate-fade-in-up stagger-1">
-          <MetricCard title="Total de Eleitores" value={metricas.total.toLocaleString("pt-BR")} icon={Users} variant="primary" />
-        </Link>
-        <Link to="/app/captacao" className="block animate-fade-in-up stagger-2">
-          <MetricCard title="Cadastros Hoje" value={metricas.hoje.toString()} icon={UserPlus} variant="success" />
-        </Link>
-        <Link to="/app/cadastros" className="block animate-fade-in-up stagger-3">
-          <MetricCard title="Lideranças Ativas" value={ranking.length.toString()} icon={Layers} variant="primary" />
-        </Link>
-        <Link to="/app/relatorios" className="block animate-fade-in-up stagger-4">
-          <MetricCard title="Meta do Mês" value={`${pctMeta}%`} icon={Target} trend={`${metricas.total}/${totalMeta}`} variant="success" />
-        </Link>
-      </div>
+      {metricCards.length > 0 && (
+        <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+          {metricCards.map((card, index) => (
+            <Link key={card.to} to={card.to} className={`block animate-fade-in-up stagger-${Math.min(index + 1, 4)}`}>
+              <MetricCard title={card.title} value={card.value} icon={card.icon} trend={card.trend} variant={card.variant} />
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Ações rápidas + alertas */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -207,12 +212,17 @@ function VisaoPolitico({
 /* ---------- Ações Rápidas ---------- */
 function AcoesRapidas() {
   const navigate = useNavigate();
+  const { hasPermission, isSuperAdmin } = useCompany();
   const acoes: Array<{ label: string; icon: any; to: string; tone: string }> = [
     { label: "Novo Eleitor",     icon: UserPlus,       to: "/app/captacao",       tone: "from-primary/15 to-primary/5 text-primary" },
     { label: "Novo Evento",      icon: Calendar,       to: "/app/eventos",        tone: "from-success/15 to-success/5 text-success" },
-    { label: "Enviar Mensagem",  icon: MessageSquare,  to: "/app/comunicacao",    tone: "from-sky-500/15 to-sky-500/5 text-sky-600 dark:text-sky-400" },
+    { label: "Enviar Mensagem",  icon: MessageSquare,  to: "/app/atendimento", tone: "from-sky-500/15 to-sky-500/5 text-sky-600 dark:text-sky-400" },
     { label: "Nova Pesquisa",    icon: BarChart2,      to: "/app/pesquisas/nova", tone: "from-warning/15 to-warning/5 text-warning" },
   ];
+  const acoesVisiveis = acoes.filter((acao) => canAccessRoute(acao.to, hasPermission, isSuperAdmin));
+
+  if (acoesVisiveis.length === 0) return null;
+
   return (
     <div className="card-interactive p-6">
       <div className="mb-4">
@@ -220,7 +230,7 @@ function AcoesRapidas() {
         <p className="text-sm text-muted-foreground">Atalhos para o que você mais usa</p>
       </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {acoes.map((a) => (
+        {acoesVisiveis.map((a) => (
           <button
             key={a.label}
             type="button"
@@ -243,8 +253,9 @@ function AcoesRapidas() {
 /* ---------- Alertas Críticos ---------- */
 function AlertasCriticos() {
   const { data: pendentes = 0 } = usePendentesCount();
+  const { hasPermission, isSuperAdmin } = useCompany();
   const alerts: Array<{ icon: any; titulo: string; sub: string; to: string; tone: string }> = [];
-  if (pendentes > 0) {
+  if (pendentes > 0 && canAccessRoute("/app/atendimento", hasPermission, isSuperAdmin)) {
     alerts.push({
       icon: Inbox,
       titulo: `${pendentes} ${pendentes === 1 ? "atendimento pendente" : "atendimentos pendentes"}`,
@@ -294,9 +305,16 @@ function AlertasCriticos() {
 
 /* ---------- Últimas Atividades ---------- */
 function UltimasAtividades() {
+  const { hasPermission, isSuperAdmin } = useCompany();
   const [items, setItems] = useState<Array<{ id: string; nome: string; created_at: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const canSeeEleitores = canAccessRoute("/app/eleitores", hasPermission, isSuperAdmin);
   useEffect(() => {
+    if (!canSeeEleitores) {
+      setItems([]);
+      setLoading(false);
+      return;
+    }
     (async () => {
       const { data } = await supabase
         .from("eleitores")
@@ -306,7 +324,9 @@ function UltimasAtividades() {
       setItems((data ?? []) as any);
       setLoading(false);
     })();
-  }, []);
+  }, [canSeeEleitores]);
+
+  if (!canSeeEleitores) return null;
 
   const fmt = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();

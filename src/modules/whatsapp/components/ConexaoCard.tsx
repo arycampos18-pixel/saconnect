@@ -21,19 +21,24 @@ export function ConexaoCard() {
   });
 
   const disconnect = useMutation({
-    mutationFn: () => whatsappService.disconnect(),
+    mutationFn: async () => {
+      if (!confirm("Tem certeza que deseja desconectar?\n\nVocê precisará escanear o QR Code novamente para reconectar.")) {
+        throw new Error("__cancel__");
+      }
+      return whatsappService.disconnect();
+    },
     onSuccess: () => {
       toast.success("WhatsApp desconectado");
       qc.invalidateQueries({ queryKey: ["whatsapp"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => { if (e.message !== "__cancel__") toast.error(e.message); },
   });
 
   const restart = useMutation({
     mutationFn: () => whatsappService.restart(),
     onSuccess: () => {
-      toast.success("Instância reiniciada");
-      setTimeout(() => qc.invalidateQueries({ queryKey: ["whatsapp"] }), 1500);
+      toast.success("Instância reiniciada. Verificando reconexão...");
+      setTimeout(() => qc.invalidateQueries({ queryKey: ["whatsapp"] }), 5000);
     },
     onError: (e: Error) => toast.error(e.message),
   });
