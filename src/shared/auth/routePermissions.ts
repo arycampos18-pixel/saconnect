@@ -135,6 +135,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/app/political/predictions": "political.predicoes.view",
   "/app/political/competitors": "political.concorrencia.view",
   "/app/political/segmentation": "political.segmentacao.view",
+  "/app/political/logistica": "liderancas.view",
   "/app/political/departments": "departamentos.view",
   "/app/political/liderancas": "liderancas.view",
   "/app/political/cabos": "cabos.view",

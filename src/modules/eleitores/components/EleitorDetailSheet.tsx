@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-   Phone, MapPin, IdCard, Building2, UserCheck, Tag, Shield, MessageCircle, Mail, Trash2, Loader2, TrendingUp, Star, Lock, Pencil, Check, X,
+  Phone, MapPin, IdCard, Building2, UserCheck, Tag, Shield, MessageCircle, Mail, Trash2, Loader2, TrendingUp, Star, Lock, Pencil, Check, X,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
