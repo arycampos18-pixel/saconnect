@@ -56,14 +56,17 @@ ls package.json scripts/vps-deploy.sh
 
 ### Se ainda **não** tens o código na VPS — clonar primeiro
 
-Substitui `URL_DO_TEU_GIT` pelo URL real (GitHub, GitLab, etc.):
+Repositório oficial do projecto: **[https://github.com/arycampos18-pixel/saconnect](https://github.com/arycampos18-pixel/saconnect)**
 
 ```bash
 cd /home/admin
-git clone URL_DO_TEU_GIT sa-connect
+rm -rf sa-connect
+git clone https://github.com/arycampos18-pixel/saconnect.git sa-connect
 cd /home/admin/sa-connect
-ls package.json
+ls package.json scripts/vps-deploy.sh
 ```
+
+Durante `npm ci` ou `npm run build` podem aparecer linhas `npm warn deprecated ...` — **são avisos**, não impedem o deploy. Espera até o comando terminar (mensagem `OK:` ou `built in ...`).
 
 ### Fluxo mínimo na VPS (Debian), **dentro da pasta do clone**
 

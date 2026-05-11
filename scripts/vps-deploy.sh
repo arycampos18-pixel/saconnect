@@ -18,6 +18,7 @@ fi
 
 command -v npm >/dev/null 2>&1 || { echo "Erro: instale Node.js 20 ou superior."; exit 1; }
 
+echo "A instalar dependencias (npm ci). Avisos 'npm warn deprecated' sao normais — aguarde o fim."
 npm ci
 npm run build
 
