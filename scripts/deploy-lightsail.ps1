@@ -1,17 +1,27 @@
 # UTF-8 BOM: Windows PowerShell 5.x
 <#
 .SYNOPSIS
-  Deploy SA Connect na VPS Lightsail (Ubuntu) via SSH.
+  Deploy SA Connect na VPS Lightsail via SSH (Ubuntu ou blueprint Node.js).
+
+.EXAMPLE
+  .\scripts\deploy-lightsail.ps1 -UploadEnv
+  Por defeito: chave C:\Sistema\SAmuel\Samuel_01.pem, IP 15.222.65.20, utilizador admin (Node.js Lightsail).
+  Instancia Ubuntu: use -SshUser ubuntu (e o IP correcto).
 
 .EXAMPLE
   .\scripts\deploy-lightsail.ps1 -SkipPortCheck
   Pula o teste local da porta 22 (use se tiver certeza que o servidor aceita SSH).
+
+.EXAMPLE
+  .\scripts\deploy-lightsail.ps1 -PullDeploy
+  Apos git push no PC: no servidor faz git pull, npm ci, build e reload nginx (sem apt).
 #>
 param(
-  [string]$KeyPath = "C:\Sistema\Samuel\LightsailDefaultKey-ca-central-1.pem",
-  [string]$ServerHost = "3.96.187.148",
-  [string]$SshUser = "ubuntu",
+  [string]$KeyPath = "C:\Sistema\SAmuel\Samuel_01.pem",
+  [string]$ServerHost = "15.222.65.20",
+  [string]$SshUser = "admin",
   [switch]$UploadEnv,
+  [switch]$PullDeploy,
   [switch]$InitLocalEnv,
   [switch]$SkipPortCheck
 )
@@ -25,6 +35,7 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $BootstrapLocal = Join-Path $PSScriptRoot "remote-bootstrap.sh"
+$PullDeployLocal = Join-Path $PSScriptRoot "remote-pull-deploy.sh"
 
 function Test-TcpPortOpenIpv4 {
   param([string]$HostName, [int]$Port, [int]$TimeoutMs = 15000)
@@ -88,11 +99,16 @@ if (-not (Test-Path -LiteralPath $BootstrapLocal)) {
 }
 
 try {
+  # OpenSSH no Windows exige que NINGUEM alem do teu user leia a chave (rejeita se "Users" tiver acesso).
   & icacls.exe $KeyPath /inheritance:r 2>$null | Out-Null
-  & icacls.exe $KeyPath /grant:r "$($env:USERNAME):(R)" 2>$null | Out-Null
+  & icacls.exe $KeyPath /remove:g "BUILTIN\Users" 2>$null | Out-Null
+  & icacls.exe $KeyPath /remove:g "Everyone" 2>$null | Out-Null
+  & icacls.exe $KeyPath /grant:r "${env:USERNAME}:(R)" 2>$null | Out-Null
 } catch {
-  Write-Host "Aviso: icacls na chave falhou; se SSH reclamar de permissao, rode:" -ForegroundColor Yellow
-  Write-Host "  icacls `"$KeyPath`" /inheritance:r ; icacls `"$KeyPath`" /grant:r `"$($env:USERNAME):(R)`"" -ForegroundColor Yellow
+  Write-Host "Aviso: icacls na chave falhou; se SSH reclamar de permissao, rode na ordem:" -ForegroundColor Yellow
+  Write-Host "  icacls `"$KeyPath`" /inheritance:r" -ForegroundColor Yellow
+  Write-Host "  icacls `"$KeyPath`" /remove:g `"BUILTIN\Users`"" -ForegroundColor Yellow
+  Write-Host "  icacls `"$KeyPath`" /grant:r `"`${env:USERNAME}:(R)`"" -ForegroundColor Yellow
 }
 
 $SshTarget = "${SshUser}@${ServerHost}"
@@ -122,6 +138,7 @@ if (-not $SkipPortCheck) {
     Write-Host "  a rede da sua casa/empresa pode bloquear SAIDA na porta 22: teste 4G/hotspot do celular." -ForegroundColor Yellow
     Write-Host "Se a VM for EC2 (nao Lightsail): Security Group da instancia -> Inbound -> SSH 22 da sua rede." -ForegroundColor Yellow
     Write-Host "Se tiver certeza que 22 esta aberto e o teste do Windows falhou em falso, rode com: -SkipPortCheck" -ForegroundColor Yellow
+    Write-Host "Diagnostico extra (PowerShell): Test-NetConnection -ComputerName $ServerHost -Port 22" -ForegroundColor DarkGray
     Write-Host ""
     exit 1
   }
@@ -139,13 +156,30 @@ if ($UploadEnv) {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+if ($PullDeploy) {
+  if (-not (Test-Path -LiteralPath $PullDeployLocal)) {
+    Write-Error "Arquivo nao encontrado: $PullDeployLocal"
+  }
+  Write-Host "Pull + build no servidor ($SshTarget)..." -ForegroundColor Cyan
+  $utf8p = [System.Text.UTF8Encoding]::new($false)
+  $pullText = [System.IO.File]::ReadAllText($PullDeployLocal, $utf8p) -replace "`r`n", "`n" -replace "`r", "`n"
+  $pullText | & ssh @KeyArgs $SshTarget "bash -s"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  Write-Host "Pronto (pull + build)." -ForegroundColor Green
+  exit 0
+}
+
 Write-Host "Executando bootstrap no servidor ($SshTarget)..." -ForegroundColor Cyan
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $bootstrapText = [System.IO.File]::ReadAllText($BootstrapLocal, $utf8)
+# CRLF quebra "set -o pipefail" no bash (vira "pipefail^M" -> invalid option)
+$bootstrapText = $bootstrapText -replace "`r`n", "`n" -replace "`r", "`n"
 $bootstrapText | & ssh @KeyArgs $SshTarget "bash -s"
 if ($LASTEXITCODE -ne 0) {
   if ($LASTEXITCODE -eq 2) {
-    Write-Host "Codigo 2: configure o .env no servidor (Supabase) ou use -UploadEnv e rode de novo." -ForegroundColor Yellow
+    Write-Host "Codigo 2: .env no servidor ainda com placeholders (xxxx/sua_chave) ou bootstrap falhou." -ForegroundColor Yellow
+    Write-Host "  Se viu 'invalid option' / pipefail: ja corrigido no script (CRLF). Rode de novo sem -UploadEnv se .env ja foi enviado." -ForegroundColor Yellow
+    Write-Host "  Senao: confira .env em /var/www/saconnect e use -UploadEnv de novo." -ForegroundColor Yellow
   }
   exit $LASTEXITCODE
 }
