@@ -43,7 +43,7 @@ Se mudar o `.env`, rode de novo: `npm run build` e `bash scripts/lightsail-setup
 
 5. **Supabase**: em **Authentication → URL Configuration**, inclui `http://SEU_IP_PUBLICO` (e o domínio futuro com `https://`) em **Site URL** e **Redirect URLs**.
 
-6. **t3.micro (1 GiB RAM)**: o `npm run build` pode falhar por falta de memória. Se acontecer, cria [swap](https://ubuntu.com/server/docs/swap-space) ou faz o build no PC e envia só a pasta `dist` (ver `npm run publish:dist` e `PROMPT_IA_SUPABASE_E_VPS.md`).
+6. **t3.micro (1 GiB RAM)**: o `vite build` pode dar *heap out of memory*. O script `lightsail-setup.sh` passa a **criar automaticamente** 2 GiB de swap (`/swap-sa-connect-build`) e usa `NODE_OPTIONS=--max-old-space-size=3072` quando a máquina tem pouca RAM. O build fica mais lento mas deve concluir. Alternativa: build no PC e `npm run publish:dist`.
 
 ## Banco de dados: nuvem, local ou “só PostgreSQL”?
 
