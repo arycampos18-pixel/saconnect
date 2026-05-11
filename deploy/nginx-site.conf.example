@@ -1,0 +1,28 @@
+# Exemplo para Nginx (Ubuntu/Debian): copiar para /etc/nginx/sites-available/sa-connect
+# Ajustar server_name e root; depois: sudo nginx -t && sudo systemctl reload nginx
+#
+# Os dados gravam-se no Supabase (HTTPS a partir do browser). A VPS só serve o frontend.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name seu-dominio.com.br www.seu-dominio.com.br;
+
+    root /var/www/sa-connect;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript application/xml image/svg+xml;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+}
