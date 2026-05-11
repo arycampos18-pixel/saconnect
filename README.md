@@ -24,6 +24,27 @@ bash scripts/lightsail-setup.sh
 No painel da nuvem (ex.: Lightsail), libere a porta **HTTP 80**. Abra `http://SEU_IP_PUBLICO`.  
 Se mudar o `.env`, rode de novo: `npm run build` e `bash scripts/lightsail-setup.sh` (ou só `sudo systemctl reload nginx` se o `root` já apontar para `dist`).
 
+### Deploy AWS EC2 (Ubuntu AMI)
+
+1. **Security group** da instância (EC2 → Rede → clicar no grupo): regras de entrada  
+   - **SSH 22** — origem: o teu IP (`Meu IP` no consola) ou temporariamente `0.0.0.0/0` (menos seguro).  
+   - **HTTP 80** — origem: `0.0.0.0/0` (para o site abrir no browser).  
+   - **HTTPS 443** — opcional por agora; necessário depois de configurares TLS (Certbot / ALB).
+
+2. **Ligar por SSH** (AMI Ubuntu: utilizador `ubuntu`, não `admin`):
+
+   ```bash
+   ssh -i /caminho/Samuel_02.pem ubuntu@SEU_IP_PUBLICO
+   ```
+
+3. **Na instância**, os mesmos comandos da secção **Deploy na VPS** acima (`/var/www/saconnect`, `.env`, `bash scripts/lightsail-setup.sh`). O script configura o Nginx a servir a pasta `dist` do clone.
+
+4. **IP elástico**: sem ele, o IPv4 público muda ao parar/iniciar a VM. Para produção, associa um [Elastic IP](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html) à instância.
+
+5. **Supabase**: em **Authentication → URL Configuration**, inclui `http://SEU_IP_PUBLICO` (e o domínio futuro com `https://`) em **Site URL** e **Redirect URLs**.
+
+6. **t3.micro (1 GiB RAM)**: o `npm run build` pode falhar por falta de memória. Se acontecer, cria [swap](https://ubuntu.com/server/docs/swap-space) ou faz o build no PC e envia só a pasta `dist` (ver `npm run publish:dist` e `PROMPT_IA_SUPABASE_E_VPS.md`).
+
 ## Banco de dados: nuvem, local ou “só PostgreSQL”?
 
 O aplicativo **não fala com PostgreSQL direto pelo navegador**. Ele usa o **Supabase** (`@supabase/supabase-js`): API REST (PostgREST), **Auth**, **Realtime** e **Edge Functions**. O PostgreSQL do Supabase é o armazenamento por trás dessa API.
