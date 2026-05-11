@@ -18,6 +18,23 @@ fi
 
 command -v npm >/dev/null 2>&1 || { echo "Erro: instale Node.js 20 ou superior."; exit 1; }
 
+# Mesma logica que lightsail-setup.sh: VPS pequena (ex. t3.micro) precisa de swap para vite build.
+if [[ -r /proc/meminfo ]]; then
+  _mem=$(awk '/MemTotal:/{print $2}' /proc/meminfo)
+  _swp=$(awk '/SwapTotal:/{print $2}' /proc/meminfo)
+  if ((_mem < 2560000 && _swp < 1536000)); then
+    _sf=/swap-sa-connect-build
+    if [[ ! -f "$_sf" ]]; then
+      echo "A criar swap 2G em $_sf (sudo) para o build nao falhar por RAM..."
+      sudo fallocate -l 2G "$_sf" 2>/dev/null || sudo dd if=/dev/zero of="$_sf" bs=1M count=2048 status=progress
+      sudo chmod 600 "$_sf" && sudo mkswap "$_sf"
+    fi
+    swapon --show 2>/dev/null | grep -qF "$_sf" || sudo swapon "$_sf"
+    grep -qF "$_sf" /etc/fstab 2>/dev/null || echo "$_sf none swap sw 0 0" | sudo tee -a /etc/fstab >/dev/null
+  fi
+fi
+export NODE_OPTIONS="--max-old-space-size=3072"
+
 echo "A instalar dependencias (npm ci). Avisos 'npm warn deprecated' sao normais — aguarde o fim."
 npm ci
 npm run build

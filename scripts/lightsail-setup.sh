@@ -23,6 +23,37 @@ if [[ ! -f package.json ]]; then
   exit 1
 fi
 
+# EC2 t3.micro / Lightsail 512MB-1GB: Vite esgota a RAM sem swap.
+_ensure_swap_for_build() {
+  local mem_kb swap_kb swapf=/swap-sa-connect-build
+  mem_kb=$(awk '/MemTotal:/{print $2}' /proc/meminfo)
+  swap_kb=$(awk '/SwapTotal:/{print $2}' /proc/meminfo)
+  if (( mem_kb >= 2560000 && swap_kb >= 1048576 )); then
+    return 0
+  fi
+  if (( swap_kb >= 1536000 )); then
+    return 0
+  fi
+  echo "Memoria baixa (RAM ${mem_kb} kB, swap ${swap_kb} kB). A criar 2 GiB de swap em ${swapf}..."
+  if [[ ! -f "$swapf" ]]; then
+    sudo fallocate -l 2G "$swapf" 2>/dev/null || sudo dd if=/dev/zero of="$swapf" bs=1M count=2048 status=progress
+    sudo chmod 600 "$swapf"
+    sudo mkswap "$swapf"
+  fi
+  if ! swapon --show 2>/dev/null | grep -qF "$swapf"; then
+    sudo swapon "$swapf"
+  fi
+  if ! grep -qF "$swapf" /etc/fstab 2>/dev/null; then
+    echo "$swapf none swap sw 0 0" | sudo tee -a /etc/fstab >/dev/null
+  fi
+  echo "Swap activo:" && swapon --show || true
+}
+
+_ensure_swap_for_build
+
+# Mais heap virtual; com swap o kernel consegue satisfazer (build fica mais lento).
+export NODE_OPTIONS="--max-old-space-size=3072"
+
 npm ci
 npm run build
 
