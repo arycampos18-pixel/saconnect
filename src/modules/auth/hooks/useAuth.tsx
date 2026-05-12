@@ -139,8 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       profile,
       loading,
-      isAuthenticated:
-        !!session && isSessionValid(session) && (profile === null || profile.ativo !== false),
+   isAuthenticated: !!session && isSessionValid(session) && (profile === null || profile.ativo !== false),
     }),
     [session, profile, loading],
   );

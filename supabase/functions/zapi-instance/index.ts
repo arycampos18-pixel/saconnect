@@ -202,8 +202,20 @@ Deno.serve(async (req: Request) => {
       case "update-queue-settings": result = await call("PUT", "/queue-settings", payload); break;
 
       // ========= WEBHOOKS =========
+      // "Ao receber" — mensagens recebidas pelo número
       case "update-webhook": result = await call("PUT", "/update-webhook-received", { value: payload.value }); break;
-      case "update-notify-sent-by-me": result = await call("PUT", "/update-webhook-send", { value: !!payload.value }); break;
+      // "Ao enviar" — mensagens enviadas pelo dispositivo físico
+      case "update-webhook-send-url": result = await call("PUT", "/update-webhook-send", { value: payload.value }); break;
+      // Toggle "Notificar as enviadas por mim também"
+      case "update-notify-sent-by-me": result = await call("PUT", "/update-webhook-notify-me", { value: !!payload.value }); break;
+      // "Receber status da mensagem" (enviado, entregue, lido)
+      case "update-webhook-status": result = await call("PUT", "/update-webhook-message-status", { value: payload.value }); break;
+      // "Ao desconectar"
+      case "update-webhook-disconnected": result = await call("PUT", "/update-webhook-disconnected", { value: payload.value }); break;
+      // "Ao conectar"
+      case "update-webhook-connected": result = await call("PUT", "/update-webhook-connected", { value: payload.value }); break;
+      // "Presença do chat"
+      case "update-webhook-presence": result = await call("PUT", "/update-webhook-chat-presence", { value: payload.value }); break;
 
       default:
         return json({ error: `Ação desconhecida: ${action}` }, 400);

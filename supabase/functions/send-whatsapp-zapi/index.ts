@@ -40,11 +40,21 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+
+    // JWT decode local (evita round-trip Auth que falha com "Session missing").
+    const _jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const userId = (() => {
+      try {
+        const part = (_jwt.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+        const padded = part + "=".repeat((4 - part.length % 4) % 4);
+        const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+        const sub = payload.sub ?? payload.user_id;
+        return typeof sub === "string" && sub.length > 0 ? sub : null;
+      } catch { return null; }
+    })();
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Token inválido ou ausente." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -53,7 +63,7 @@ Deno.serve(async (req: Request) => {
     let ZAPI_INSTANCE_TOKEN = ENV_INSTANCE_TOKEN ?? "";
     let ZAPI_CLIENT_TOKEN = ENV_CLIENT_TOKEN ?? "";
     try {
-      const { data: companyId } = await supabase.rpc("user_default_company", { _user_id: userData.user.id });
+      const { data: companyId } = await supabase.rpc("user_default_company", { _user_id: userId });
       if (companyId) {
         const { data: sess } = await supabase
           .from("whatsapp_sessions").select("credentials")
@@ -106,7 +116,7 @@ Deno.serve(async (req: Request) => {
       const exists = (existsData as Record<string, unknown>)?.exists;
       if (existsResp.ok && exists === false) {
         await supabase.from("mensagens_externas").insert({
-          user_id: userData.user.id,
+          user_id: userId,
           canal: "WhatsApp",
           destinatario: to,
           destinatario_nome: nome ?? null,
@@ -156,7 +166,7 @@ Deno.serve(async (req: Request) => {
 
     if (!zapiResp.ok) {
       await supabase.from("mensagens_externas").insert({
-        user_id: userData.user.id,
+        user_id: userId,
         canal: "WhatsApp",
         destinatario: to,
         destinatario_nome: nome ?? null,
@@ -178,7 +188,7 @@ Deno.serve(async (req: Request) => {
     const { data: inserted } = await supabase
       .from("mensagens_externas")
       .insert({
-        user_id: userData.user.id,
+        user_id: userId,
         canal: "WhatsApp",
         destinatario: to,
         destinatario_nome: nome ?? null,
@@ -223,7 +233,7 @@ Deno.serve(async (req: Request) => {
           conteudo: message,
           provedor_message_id: zapiData?.messageId || zapiData?.id || null,
           status: "Enviado",
-          enviado_por: userData.user.id,
+          enviado_por: userId,
           enviado_em: new Date().toISOString(),
           metadata: { response: zapiData, source: "send-whatsapp-zapi" },
         });

@@ -14,10 +14,6 @@ dist
 .env
 .env.*
 !.env.example
-*.pem
-
-# clone acidental dentro do repo (nao usar como submodulo)
-/saconnect/
 dist-ssr
 *.local
 

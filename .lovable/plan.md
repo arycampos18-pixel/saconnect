@@ -1,70 +1,63 @@
-## Plano de Segurança — Sessão SA Connect
+## Objetivo
+Permitir que usuários ADM (ou perfis liberados) criem novos itens diretamente nos dropdowns dos formulários, sem sair da tela. Aplicado a todos os campos cuja origem já é uma **tabela** no banco (Tipo/Status de Evento continuam fixos por enquanto, conforme decidido).
 
-Vou implementar 3 frentes de segurança: **logout por inatividade (5 min)**, **contador no header**, e **sessão única por utilizador** com alertas. Antes de codificar, preciso confirmar algumas decisões de produto.
+## Escopo de campos cobertos nesta entrega
 
-### Frente 1 — Inatividade (5 min) + Contador no Header
+| Campo | Tabela | Onde é usado |
+|---|---|---|
+| Liderança | `liderancas` | Eventos (Responsável), Eleitores, Cabos, Segmentação |
+| Cabo eleitoral | `cabos_eleitorais` | Eleitores, Segmentação |
+| Departamento | `departamentos` | Departamentos do gabinete, Tickets |
+| Categoria de Atendimento | `ticket_categories` | Tickets |
+| Tag | `tags` | Eleitores, Segmentação |
 
-- Hook `useIdleSession` montado no `AppLayout` (só área `/app`).
-- Eventos: `mousemove`, `mousedown`, `keydown`, `scroll`, `touchstart` (passivos, debounced a 1s).
-- Constantes: `IDLE_MS = 5 * 60 * 1000`, `WARN_MS = 60 * 1000` (último minuto pisca + `aria-live`).
-- Ao expirar: `authService.signOut()` + limpeza de caches sensíveis + redirect `/login?reason=idle` com toast.
-- Componente `SessionTimer` no header do `AppLayout` (mm:ss, ícone relógio, cor muda no warning).
-- Pausa quando aba está em background? **Pergunto abaixo.**
+Tipo de evento, Status de evento e Gênero permanecem como enums fixos por enquanto (não migrar nesta etapa).
 
-### Frente 2 — Sessão única por utilizador
+## Banco de dados
 
-Tabela `auth_app_sessions`:
+Nova tabela `user_permissions` (1:1 com usuário), com flags:
+- `can_create_liderancas`, `can_create_cabos`, `can_create_departamentos`, `can_create_categorias`, `can_create_tags`
+- `can_create_all` (atalho)
+- ADM (`has_role(uid,'admin')`) sempre pode, mesmo sem flag.
 
-```text
-id uuid PK
-user_id uuid (FK auth.users)
-session_jti text          -- hash do refresh token / id único do device
-device_label text         -- "Chrome 120 / macOS"
-ip text (nullable, LGPD)
-created_at, last_seen_at
-revoked_at (nullable)
-revoked_reason text       -- 'replaced','idle','manual','admin'
-```
+Função `public.can_user_create(_user uuid, _campo text) returns boolean` (security definer) usada em RLS para liberar `INSERT` nas tabelas de catálogo apenas para quem tem permissão. Cada tabela ganha policy `INSERT` baseada nessa função.
 
-Fluxo no login (Edge Function `auth-register-session` com service role):
+## Componentes (frontend)
 
-1. Cliente faz `signInWithPassword` → recebe sessão.
-2. Cliente chama edge function com JWT + `device_fingerprint` (UA + canvas hash leve).
-3. Edge function (política a confirmar): **novo desliga antigo** (recomendado) — marca sessões anteriores `revoked_at=now(), reason='replaced'`, insere nova activa, dispara realtime `auth-sessions:user_id` para o antigo.
-4. Cliente antigo escuta canal → toast "Sessão terminada noutro dispositivo" → `signOut()` + redirect.
+1. `src/shared/components/forms/DropdownComNovoCadastro.tsx`
+   - Props: `campo`, `label`, `opcoes`, `value`, `onChange`, `placeholder`, `onCreated?`
+   - Usa `usePermissoes()` para decidir se mostra "+ Novo".
+   - Mostra item especial "+ Novo {label}" no fim da lista que abre o modal.
+2. `src/shared/components/forms/ModalNovoCadastro.tsx`
+   - Modal genérico (nome obrigatório, descrição opcional dependendo do campo).
+   - Validação client-side: nome ≥ 2 chars, sem duplicatas (case-insensitive).
+   - Insere via `catalogosCriacaoService` (Supabase client). Sucesso → toast → callback com novo registro.
+3. `src/shared/hooks/usePermissoes.ts`
+   - Lê `user_permissions` + verifica role admin → expõe `can(campo)`.
+4. `src/shared/services/catalogosCriacaoService.ts`
+   - `criar(campo, payload)` mapeia campo→tabela e faz insert; retorna `{id, nome}`.
 
-Validação contínua: hook no `AppLayout` faz heartbeat a cada 60s para edge function `auth-heartbeat` que valida `session_jti` ainda activa. Se revogada → signOut imediato. Não confia só no JWT (que continua válido até expirar).
+## Integrações iniciais
+- `EventoFormDialog`: substituir o `Select` de Responsável pelo novo componente (`campo="liderancas"`).
+- `SegmentoFormDialog`, telas de Eleitores e Tickets que usam esses catálogos: trocar Selects de Liderança/Cabo/Departamento/Categoria/Tag pelo novo componente.
 
-Alertas:
-- Insert em `security_events` (nova tabela ou reutilizar `settings_audit_logs`) com tipo `concurrent_login_replaced` ou `concurrent_login_blocked`.
-- Notificação in-app para admins da empresa via tabela `notifications` (já existe).
-- Email opcional via edge function (deixo desligado por padrão, flag).
+## Configuração de permissões
+- Página simples em **Configurações → Permissões de cadastro** (admin-only) para marcar as flags por usuário. (Reutiliza padrão de `settings_*` já existente — apenas CRUD básico.)
 
-### Frente 3 — Default deny de rotas (já feito anteriormente)
+## Segurança
+- RLS bloqueia `INSERT` para quem não tem permissão (defesa no servidor).
+- Trigger `created_by = auth.uid()` nas tabelas de catálogo.
+- Validação anti-duplicata no client + `unique` parcial (case-insensitive) onde fizer sentido.
 
-Confirmar que testes ainda passam após estas mudanças.
+## Fora desta entrega (explicitamente)
+- Migrar Tipo/Status/Gênero de enum → tabela.
+- Rate limiting de 10/h (pode ser adicionado depois via trigger).
+- Edge functions dedicadas por campo (usaremos o client + RLS).
 
-### Detalhes técnicos
-
-- **RLS**: `auth_app_sessions` — user vê só suas linhas; service role faz writes.
-- **Realtime**: `ALTER PUBLICATION supabase_realtime ADD TABLE auth_app_sessions`.
-- **Edge functions**: `auth-register-session`, `auth-heartbeat`, `auth-revoke-session` (logout manual de outras sessões em "Minhas Sessões" — futuro).
-- **JWT TTL**: documentar em README que sessão única "forte" depende do heartbeat porque o JWT permanece válido até expirar (Supabase limit).
-- **Sem MFA / rate-limit servidor / CSP nesta entrega** — listo como follow-ups.
-
-### Ficheiros a tocar
-
-- `src/shared/auth/useIdleSession.ts` (novo)
-- `src/shared/auth/useSessionEnforcement.ts` (novo — heartbeat + realtime)
-- `src/shared/auth/sessionFingerprint.ts` (novo)
-- `src/shared/components/SessionTimer.tsx` (novo)
-- `src/shared/layouts/AppLayout.tsx` (integra hooks + timer no header)
-- `src/shared/auth/authService.ts` (chama register-session após login; limpa session local no logout)
-- `supabase/migrations/<ts>_auth_app_sessions.sql`
-- `supabase/functions/auth-register-session/index.ts`
-- `supabase/functions/auth-heartbeat/index.ts`
-- `src/pages/Login.tsx` (mostrar `?reason=idle|replaced` em toast)
-
-### Perguntas antes de implementar
-
-Listo abaixo via `ask_questions` — 4 decisões de produto que mudam comportamento.
+## Ordem de execução
+1. Migration: `user_permissions` + função `can_user_create` + policies de INSERT nos 5 catálogos + colunas `created_by`.
+2. Hook `usePermissoes` + service de criação.
+3. Componentes `DropdownComNovoCadastro` + `ModalNovoCadastro`.
+4. Trocar o Select de Responsável no `EventoFormDialog` (campo onde você está agora).
+5. Aplicar nos demais formulários listados.
+6. Tela de gestão de permissões em Configurações.

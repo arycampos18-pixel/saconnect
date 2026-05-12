@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, XCircle, AlertCircle, RefreshCw, ExternalLink, KeyRound, Pencil, QrCode, Unplug, FlaskConical, ShieldCheck, Phone } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, RefreshCw, ExternalLink, KeyRound, Pencil, QrCode, Unplug, FlaskConical, ShieldCheck, Phone, Webhook } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { QRCodeSVG } from "qrcode.react";
 import SAConnectDataTesteTelefone from "@/modules/configuracoes/components/AssertivaTesteTelefone";
+import { zapiInstanceService } from "@/modules/whatsapp/services/zapiInstanceService";
 
 type Provider = {
   id: string;
@@ -40,56 +42,131 @@ type Provider = {
   ultimas_consultas?: number;
 };
 
+function mensagemErroCarregarIntegracoes(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+/** Corpo JSON de functions.invoke quando a Edge devolve 4xx/5xx (Supabase exp?e em error.context). */
+async function corpoErroEdgeFunction(err: unknown): Promise<string | null> {
+  const ctx = (err as any)?.context;
+  if (!ctx) return null;
+  try {
+    if (typeof ctx.json === "function") {
+      const j = await ctx.json();
+      if (j && typeof j === "object" && typeof (j as any).error === "string") return (j as any).error;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (typeof ctx.text === "function") {
+      const t = await ctx.text();
+      if (t) {
+        try {
+          const j = JSON.parse(t);
+          if (typeof j?.error === "string") return j.error;
+        } catch {
+          return t.slice(0, 500);
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** R?tulo amig?vel e sem expor hostname comercial do provedor de enriquecimento. */
+function rotuloProvedorEnriquecimentoUi(provedor: unknown): string {
+  const raw = (provedor ?? "").toString().trim();
+  const p = raw.toLowerCase();
+  if (!p) return "SA Connect Data";
+  if (p === "assertiva" || p === "mock" || p.includes("assertivasolucoes") || p.includes("provedor-cadastral")) {
+    return "SA Connect Data";
+  }
+  if (p === "sa connect data") return "SA Connect Data";
+  return raw;
+}
+
+/** JSON exibido ao usu?rio: remove substring comercial do host do provedor. */
+function sanitizarJsonTextoCliente(obj: unknown): string {
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") {
+      return /assertivasolucoes/i.test(v) ? v.replace(/assertivasolucoes/gi, "provedor-cadastral") : v;
+    }
+    if (v === null || typeof v !== "object") return v;
+    if (Array.isArray(v)) return v.map(walk);
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).map(([k, val]) => [k, walk(val)]),
+    );
+  };
+  try {
+    return JSON.stringify(walk(obj), null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function ocultarAssertivaEmTextoUi(s: string): string {
+  return s.replace(/assertivasolucoes/gi, "provedor-cadastral");
+}
+
 const docs: Record<string, { url: string; secret: string; comoObter: string }> = {
   infosimples: {
-    url: "https://api.infosimples.com",
-    secret: "INFOSIMPLES_TOKEN",
+    url: "",
+    secret: "DIRECTD_TOKEN (ou configurado pelo bot�o Conectar)",
     comoObter:
-      "Crie/entre na conta em api.infosimples.com → Configurações → Token de Acesso e copie o valor.",
+      "No painel da integra��o ? hist�rico de consultas ? URL da consulta ? copie o valor do par�metro TOKEN. Cole abaixo e clique em Salvar token.",
   },
   enriquecimento: {
     url: "",
-    secret: "ANALISE_ELEITORAL_API_KEY",
-    comoObter: "Solicite a API key do provedor de enriquecimento contratado.",
+    secret: "ANALISE_ELEITORAL_API_USER + ANALISE_ELEITORAL_API_PASSWORD (ou tabela analise_provedor_credenciais)",
+    comoObter:
+      "OAuth2 SA Connect Data / Assertiva: Client ID e Secret no painel do provedor. Pode validar no modal e salvar como super admin, ou definir os secrets em Supabase ? Edge Functions ? Secrets.",
   },
   zapi: {
     url: "https://app.z-api.io",
     secret: "ZAPI_INSTANCE_ID, ZAPI_INSTANCE_TOKEN, ZAPI_CLIENT_TOKEN",
     comoObter:
-      "No painel Z-API, copie Instance ID, Token e Client-Token da instância e configure os 3 secrets.",
+      "No painel Z-API, copie Instance ID, Token e Client-Token da inst?ncia e configure os 3 secrets.",
   },
   meta_whatsapp: {
     url: "https://developers.facebook.com/apps",
     secret: "META_APP_ID, META_APP_SECRET",
     comoObter:
-      "Em developers.facebook.com, abra seu App → Configurações → Básico e copie App ID e App Secret.",
+      "Em developers.facebook.com, abra seu App ? Configura??es ? B?sico e copie App ID e App Secret.",
   },
   lovable_ai: {
     url: "",
     secret: "LOVABLE_API_KEY",
-    comoObter: "Gerenciado automaticamente pelo Lovable Cloud — não precisa configurar.",
+    comoObter: "Gerenciado automaticamente pelo Lovable Cloud ? n?o precisa configurar.",
   },
   twilio: {
     url: "https://console.twilio.com",
     secret: "TWILIO_API_KEY",
-    comoObter: "No Console Twilio → Account → API Keys, gere uma chave e cole aqui.",
+    comoObter: "No Console Twilio ? Account ? API Keys, gere uma chave e cole aqui.",
   },
   google_tickets: {
     url: "https://console.cloud.google.com",
     secret: "OAuth (gerenciado)",
     comoObter:
-      "Autenticação por usuário via OAuth Google, feita no módulo de Tickets — sem secret manual.",
+      "Autentica??o por usu?rio via OAuth Google, feita no m?dulo de Tickets ? sem secret manual.",
   },
 };
 
 export function IntegracoesPanel() {
-  const { data, isFetching, refetch } = useQuery({
+  const { data, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["analise-integracoes"],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("analise-integracao-status", {
         body: {},
       });
-      if (error) throw error;
+      if (error) {
+        const detalhe = await corpoErroEdgeFunction(error);
+        const base = error.message || "Falha ao chamar analise-integracao-status";
+        throw new Error(detalhe ? `${base} ? ${detalhe}` : base);
+      }
       if ((data as any)?.error) throw new Error((data as any).error);
       return data as { providers: Provider[] };
     },
@@ -97,8 +174,8 @@ export function IntegracoesPanel() {
 
   const conectar = (secret: string) => {
     toast.message(
-      `Para conectar, configure o secret ${secret} em Lovable Cloud → Secrets.`,
-      { description: "Após salvar o token, clique em 'Testar conexão' abaixo." },
+      `Para conectar, configure o secret ${secret} em Supabase ? Project Settings ? Edge Functions ? Secrets.`,
+      { description: "Ap?s salvar o token, clique em 'Testar conex?o' abaixo." },
     );
   };
 
@@ -106,7 +183,7 @@ export function IntegracoesPanel() {
   // Teste manual de enriquecimento por CPF
   const [enrichTestOpen, setEnrichTestOpen] = useState(false);
   const [enrichPhoneTestOpen, setEnrichPhoneTestOpen] = useState(false);
-  // Validação de credenciais OAuth2 (Client ID/Secret) sem precisar salvar
+  // Valida??o de credenciais OAuth2 (Client ID/Secret) sem precisar salvar
   const [credValidateOpen, setCredValidateOpen] = useState(false);
   const [credClientId, setCredClientId] = useState("");
   const [credClientSecret, setCredClientSecret] = useState("");
@@ -125,6 +202,77 @@ export function IntegracoesPanel() {
     dica?: string | null;
     details?: unknown;
   } | null>(null);
+  // Infosimples token modal
+  const [infoTokenOpen, setInfoTokenOpen] = useState(false);
+  const [infoToken, setInfoToken] = useState("");
+  const [infoTokenSaving, setInfoTokenSaving] = useState(false);
+  const [infoTokenResult, setInfoTokenResult] = useState<{ ok: boolean; mensagem?: string; erro?: string } | null>(null);
+
+  // Teste real DirectD TSE
+  const [tseTestOpen, setTseTestOpen] = useState(false);
+  const [tseCpf, setTseCpf] = useState("");
+  const [tseTitulo, setTseTitulo] = useState("");
+  const [tseNasc, setTseNasc] = useState("");
+  const [tseMae, setTseMae] = useState("");
+  const [tseLoading, setTseLoading] = useState(false);
+  const [tseResult, setTseResult] = useState<any>(null);
+  const [tseError, setTseError] = useState<string | null>(null);
+
+  const salvarInfosimplesToken = async () => {
+    const tok = infoToken.trim();
+    if (!tok) { toast.error("Informe o token Infosimples."); return; }
+    setInfoTokenSaving(true);
+    setInfoTokenResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("analise-validacao-eleitoral", {
+        body: { save_token: true, token: tok },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setInfoTokenResult({ ok: true, mensagem: (data as any)?.mensagem ?? "Token salvo!" });
+      toast.success("Token Infosimples salvo. A conex?o ser? validada ao actualizar.");
+      await refetch();
+    } catch (e: any) {
+      const msg = e?.message ?? "Erro ao salvar token";
+      setInfoTokenResult({ ok: false, erro: msg });
+      toast.error(msg);
+    } finally {
+      setInfoTokenSaving(false);
+    }
+  };
+
+  const [zapiWebhookLoading, setZapiWebhookLoading] = useState(false);
+  const [zapiWebhookOk, setZapiWebhookOk] = useState<boolean | null>(null);
+  const [zapiWebhookOpen, setZapiWebhookOpen] = useState(false);
+  const zapiWebhookUrlReceptivo = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-zapi-receptivo`;
+  const zapiWebhookUrlStatus   = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-zapi`;
+
+  const copiarUrl = (url: string, label: string) => {
+    navigator.clipboard.writeText(url).then(() => toast.success(`URL "${label}" copiada!`));
+  };
+
+  const configurarZapiWebhook = async () => {
+    setZapiWebhookLoading(true);
+    setZapiWebhookOk(null);
+    try {
+      const res = await zapiInstanceService.configurarTodosWebhooks(zapiWebhookUrlReceptivo, zapiWebhookUrlStatus);
+      if (res.erros === 0) {
+        setZapiWebhookOk(true);
+        toast.success("Todos os webhooks configurados! O Z-API agora envia eventos ao SA Connect.");
+      } else {
+        setZapiWebhookOk(false);
+        toast.warning(`${res.erros}/${res.total} webhooks falharam. Copie as URLs abaixo e configure manualmente no Z-API.`);
+        setZapiWebhookOpen(true);
+      }
+    } catch (e: any) {
+      setZapiWebhookOk(false);
+      toast.error("Falha ao configurar: " + (e?.message ?? "Erro desconhecido") + " ? copie as URLs abaixo.");
+      setZapiWebhookOpen(true);
+    } finally {
+      setZapiWebhookLoading(false);
+    }
+  };
+
   const [zapiEditOpen, setZapiEditOpen] = useState(false);
   const [zapiDisconnectOpen, setZapiDisconnectOpen] = useState(false);
   const [zapiForm, setZapiForm] = useState({ instance_id: "", token: "", client_token: "" });
@@ -163,7 +311,7 @@ export function IntegracoesPanel() {
   const openZapiEdit = async () => {
     const companyId = await getCompanyId();
     if (!companyId) {
-      toast.error("Empresa não encontrada");
+      toast.error("Empresa n?o encontrada");
       return;
     }
     const { data: sess } = await (supabase as any)
@@ -191,7 +339,7 @@ export function IntegracoesPanel() {
     setZapiSaving(true);
     try {
       const companyId = await getCompanyId();
-      if (!companyId) throw new Error("Empresa não encontrada");
+      if (!companyId) throw new Error("Empresa n?o encontrada");
       const credentials = {
         instance_id: zapiForm.instance_id.trim(),
         token: zapiForm.token.trim(),
@@ -237,10 +385,10 @@ export function IntegracoesPanel() {
   const disconnectZapi = async () => {
     try {
       const companyId = await getCompanyId();
-      if (!companyId) throw new Error("Empresa não encontrada");
+      if (!companyId) throw new Error("Empresa n?o encontrada");
 
-      // Best-effort: tenta desconectar a instância no Z-API antes de remover as credenciais.
-      try { await callZapiStatusAction("disconnect"); } catch { /* ignora — pode já estar inválida */ }
+      // Best-effort: tenta desconectar a inst?ncia no Z-API antes de remover as credenciais.
+      try { await callZapiStatusAction("disconnect"); } catch { /* ignora ? pode j? estar inv?lida */ }
 
       const { error } = await (supabase as any)
         .from("whatsapp_sessions")
@@ -256,7 +404,7 @@ export function IntegracoesPanel() {
       setZapiQrOpen(false);
       setZapiTestOpen(false);
 
-      toast.success("Conexão Z-API excluída. Configuração limpa.");
+      toast.success("Conex?o Z-API exclu?da. Configura??o limpa.");
       setZapiDisconnectOpen(false);
       await refetch();
     } catch (e) {
@@ -267,7 +415,7 @@ export function IntegracoesPanel() {
   const callZapiStatusAction = async (action: string) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token;
-    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    if (!token) throw new Error("Sess?o expirada. Fa?a login novamente.");
 
     const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/zapi-status?action=${action}`, {
       method: "GET",
@@ -303,7 +451,7 @@ export function IntegracoesPanel() {
     const rawMessage = payload?.status?.message ?? payload?.status?.error ?? payload?.message;
 
     if (typeof rawMessage === "string" && /you are not connected\.?/i.test(rawMessage)) {
-      return "A instância respondeu, mas o WhatsApp ainda não está conectado. Atualize e escaneie o QR Code para continuar.";
+      return "A inst?ncia respondeu, mas o WhatsApp ainda n?o est? conectado. Atualize e escaneie o QR Code para continuar.";
     }
 
     return typeof rawMessage === "string" && rawMessage.trim().length > 0 ? rawMessage : fallback;
@@ -326,7 +474,7 @@ export function IntegracoesPanel() {
         setZapiQrResult({
           ok: false,
           connected: false,
-          message: status?.message ?? "Credenciais Z-API inválidas.",
+          message: status?.message ?? "Credenciais Z-API inv?lidas.",
           qrImage: null,
           qrCode: null,
           raw: status,
@@ -338,7 +486,7 @@ export function IntegracoesPanel() {
         setZapiQrResult({
           ok: true,
           connected: true,
-          message: "O WhatsApp já está conectado nesta instância.",
+          message: "O WhatsApp j? est? conectado nesta inst?ncia.",
           qrImage: null,
           qrCode: null,
           raw: status,
@@ -361,7 +509,7 @@ export function IntegracoesPanel() {
           setZapiQrResult({
             ok: false,
             connected: false,
-            message: status?.message ?? "Credenciais Z-API inválidas.",
+            message: status?.message ?? "Credenciais Z-API inv?lidas.",
             qrImage: null,
             qrCode: null,
             raw: status,
@@ -381,7 +529,7 @@ export function IntegracoesPanel() {
           connected: false,
           message: (qrImage || status?.qrCode)
             ? "Escaneie o QR Code atualizado no WhatsApp para reconectar."
-            : getZapiDisplayMessage(status, "Não foi possível gerar um novo QR Code agora."),
+            : getZapiDisplayMessage(status, "N?o foi poss?vel gerar um novo QR Code agora."),
           qrImage,
           qrCode: typeof status?.qrCode === "string" ? status.qrCode : null,
           raw: { status, qrResponse },
@@ -414,7 +562,7 @@ export function IntegracoesPanel() {
     }
   };
 
-  // Auto-refresh do QR Code a cada N segundos enquanto o modal está aberto e não conectado
+  // Auto-refresh do QR Code a cada N segundos enquanto o modal est? aberto e n?o conectado
   useEffect(() => {
     if (!zapiQrOpen) return;
     if (!zapiAutoRefresh) return;
@@ -442,6 +590,22 @@ export function IntegracoesPanel() {
   const testarConexao = async (providerId: string) => {
     setTestando(providerId);
     try {
+      if (providerId === "infosimples") {
+        const { data, error } = await supabase.functions.invoke("analise-validacao-eleitoral", {
+          body: { ping: true },
+        });
+        if (error) throw error;
+        const r = data as any;
+        if (r?.ok) {
+          toast.success(r.mensagem ?? "Infosimples conectado", {
+            description: `${r.duracao_ms}ms`,
+          });
+        } else {
+          toast.error(r?.erro ?? "Falha ao validar token Infosimples");
+        }
+        await refetch();
+        return;
+      }
       if (providerId === "enriquecimento") {
         const { data, error } = await supabase.functions.invoke("analise-enriquecimento", {
           body: { ping: true },
@@ -449,14 +613,14 @@ export function IntegracoesPanel() {
         if (error) throw error;
         const r = data as any;
         if (r?.ok) {
-          const provLabel = (r.provedor ?? "").toString().toLowerCase() === "assertiva" ? "SA Connect Data" : r.provedor;
-          toast.success(r.mensagem ?? "Conexão validada", {
-            description: `Modo: ${r.modo} · ${provLabel} · ${r.duracao_ms}ms`,
+          const provLabel = rotuloProvedorEnriquecimentoUi(r.provedor);
+          toast.success(r.mensagem ?? "Conex?o validada", {
+            description: `Modo: ${r.modo} ? ${provLabel} ? ${r.duracao_ms}ms`,
           });
         } else {
-          const provLabel = (r?.provedor ?? "").toString().toLowerCase() === "assertiva" ? "SA Connect Data" : r?.provedor;
-          toast.error(r?.erro ?? r?.mensagem ?? "Falha ao validar conexão", {
-            description: r?.provedor ? `${provLabel} · HTTP ${r.http_status ?? "?"}` : undefined,
+          const provLabel = rotuloProvedorEnriquecimentoUi(r?.provedor);
+          toast.error(r?.erro ?? r?.mensagem ?? "Falha ao validar conex?o", {
+            description: r?.provedor ? `${provLabel} ? HTTP ${r.http_status ?? "?"}` : undefined,
           });
         }
       }
@@ -476,7 +640,7 @@ export function IntegracoesPanel() {
         } else if (r?.credentialsError) {
           setZapiTestResult({
             ok: false,
-            title: "Credenciais Z-API inválidas",
+            title: "Credenciais Z-API inv?lidas",
             message: r?.message ?? "Verifique Instance ID, Token e Client-Token.",
             state: "error",
             raw: r,
@@ -484,18 +648,18 @@ export function IntegracoesPanel() {
         } else if (r?.connected) {
           setZapiTestResult({
             ok: true,
-            title: "Conectado ✅",
-            message: "A instância Z-API está conectada e respondendo.",
+            title: "Conectado ?",
+            message: "A inst?ncia Z-API est? conectada e respondendo.",
             state: "success",
             raw: r,
           });
         } else {
           setZapiTestResult({
             ok: false,
-            title: "Aguardando conexão",
+            title: "Aguardando conex?o",
             message: getZapiDisplayMessage(
               r,
-              "A instância respondeu, mas o WhatsApp ainda não está conectado. Atualize e escaneie o QR Code para continuar.",
+              "A inst?ncia respondeu, mas o WhatsApp ainda n?o est? conectado. Atualize e escaneie o QR Code para continuar.",
             ),
             state: "warning",
             canRefreshQr: true,
@@ -506,7 +670,7 @@ export function IntegracoesPanel() {
       }
       await refetch();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao testar conexão");
+      toast.error(e instanceof Error ? e.message : "Erro ao testar conex?o");
     } finally {
       setTestando(null);
     }
@@ -518,7 +682,7 @@ export function IntegracoesPanel() {
         <div>
           <h2 className="text-lg font-semibold">APIs externas</h2>
           <p className="text-sm text-muted-foreground">
-            Conecte e teste manualmente as integrações usadas pelo sistema.
+            Conecte e teste manualmente as integra??es usadas pelo sistema.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -533,10 +697,45 @@ export function IntegracoesPanel() {
         }
         const ordem = Object.keys(grupos);
         if (ordem.length === 0) {
+          if (isFetching) {
+            return (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  Verificando integra??es?
+                </CardContent>
+              </Card>
+            );
+          }
+          if (isError) {
+            const msg = mensagemErroCarregarIntegracoes(error);
+            return (
+              <div className="space-y-4">
+                <Alert variant="destructive">
+                  <AlertTitle>N?o foi poss?vel carregar as integra??es</AlertTitle>
+                  <AlertDescription className="mt-2 space-y-2">
+                    <p className="font-mono text-xs break-all">{msg}</p>
+                    <p className="text-sm font-normal">
+                      Esta lista vem da Edge Function{" "}
+                      <code className="rounded bg-muted px-1">analise-integracao-status</code>. Se o
+                      projecto Supabase for novo, fa?a o deploy das fun??es no reposit?rio:{" "}
+                      <code className="rounded bg-muted px-1">
+                        npx supabase functions deploy analise-integracao-status
+                      </code>{" "}
+                      (ou deploy de todas). No painel Supabase, configure os secrets que cada provedor
+                      usa (ex.: INFOSIMPLES_TOKEN, META_APP_ID).
+                    </p>
+                  </AlertDescription>
+                </Alert>
+                <Button variant="outline" onClick={() => refetch()}>
+                  Tentar novamente
+                </Button>
+              </div>
+            );
+          }
           return (
             <Card>
               <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                {isFetching ? "Verificando integrações…" : "Nenhuma integração disponível."}
+                Nenhuma integra??o dispon?vel.
               </CardContent>
             </Card>
           );
@@ -565,7 +764,7 @@ export function IntegracoesPanel() {
                 <div className="space-y-1">
                   <CardTitle className="text-base">{p.nome}</CardTitle>
                   <p className="text-xs text-muted-foreground break-all">
-                    Secret(s): <code className="font-mono">{meta?.secret ?? "—"}</code>
+                    Secret(s): <code className="font-mono">{meta?.secret ?? "?"}</code>
                   </p>
                 </div>
                 <Badge variant={p.conectado ? "default" : p.configurado ? "secondary" : "outline"}>
@@ -591,6 +790,12 @@ export function IntegracoesPanel() {
                         setCredValidateOpen(true);
                         return;
                       }
+                      if (p.id === "infosimples") {
+                        setInfoToken("");
+                        setInfoTokenResult(null);
+                        setInfoTokenOpen(true);
+                        return;
+                      }
                       conectar(meta?.secret ?? "");
                     }}
                   >
@@ -606,7 +811,7 @@ export function IntegracoesPanel() {
                         disabled={zapiQrLoading}
                       >
                         <QrCode className={`h-3 w-3 mr-1 ${zapiQrLoading ? "animate-pulse" : ""}`} />
-                        {zapiQrLoading ? "Atualizando QR…" : "Atualizar QR Code"}
+                        {zapiQrLoading ? "Atualizando QR?" : "Atualizar QR Code"}
                       </Button>
                       <Button size="sm" variant="outline" onClick={openZapiEdit}>
                         <Pencil className="h-3 w-3 mr-1" />
@@ -619,7 +824,30 @@ export function IntegracoesPanel() {
                         disabled={testando === "zapi"}
                       >
                         <RefreshCw className={`h-3 w-3 mr-1 ${testando === "zapi" ? "animate-spin" : ""}`} />
-                        {testando === "zapi" ? "Testando…" : "Testar conexão Z-API"}
+                        {testando === "zapi" ? "Testando?" : "Testar conex?o Z-API"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={configurarZapiWebhook}
+                        disabled={zapiWebhookLoading}
+                      >
+                        {zapiWebhookLoading
+                          ? <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                          : zapiWebhookOk === true
+                          ? <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
+                          : zapiWebhookOk === false
+                          ? <XCircle className="h-3 w-3 mr-1 text-destructive" />
+                          : <Webhook className="h-3 w-3 mr-1" />}
+                        {zapiWebhookLoading ? "Configurando?" : "Gerar Webhook"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setZapiWebhookOpen(true)}
+                        title="Ver URLs dos webhooks para copiar manualmente"
+                      >
+                        Ver URLs
                       </Button>
                       <Button
                         size="sm"
@@ -627,7 +855,7 @@ export function IntegracoesPanel() {
                         onClick={() => setZapiDisconnectOpen(true)}
                       >
                         <Unplug className="h-3 w-3 mr-1" />
-                        Excluir conexão
+                        Excluir conex?o
                       </Button>
                     </>
                   )}
@@ -639,7 +867,7 @@ export function IntegracoesPanel() {
                       disabled={testando === p.id}
                     >
                       <RefreshCw className={`h-3 w-3 mr-1 ${testando === p.id ? "animate-spin" : ""}`} />
-                      {testando === p.id ? "Testando…" : "Testar conexão"}
+                      {testando === p.id ? "Testando?" : "Testar conex?o"}
                     </Button>
                   )}
                   {p.id === "enriquecimento" && (
@@ -664,6 +892,24 @@ export function IntegracoesPanel() {
                     >
                       <Phone className="h-3 w-3 mr-1" />
                       Testar com telefone
+                    </Button>
+                  )}
+                  {p.id === "infosimples" && p.conectado && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        setTseCpf("");
+                        setTseTitulo("");
+                        setTseNasc("");
+                        setTseMae("");
+                        setTseResult(null);
+                        setTseError(null);
+                        setTseTestOpen(true);
+                      }}
+                    >
+                      <FlaskConical className="h-3 w-3 mr-1" />
+                      Testar consulta
                     </Button>
                   )}
                   {p.id === "enriquecimento" && (
@@ -691,7 +937,7 @@ export function IntegracoesPanel() {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {p.ultimas_consultas !== undefined && (
-                    <>Consultas (30d): <strong>{p.ultimas_consultas}</strong> · </>
+                    <>Consultas (30d): <strong>{p.ultimas_consultas}</strong> ? </>
                   )}
                   Testado em {new Date(p.testado_em).toLocaleString("pt-BR")}
                 </p>
@@ -709,7 +955,7 @@ export function IntegracoesPanel() {
           <DialogHeader>
             <DialogTitle>Editar credenciais Z-API</DialogTitle>
             <DialogDescription>
-              Cole os 3 valores da sua instância no painel Z-API.
+              Cole os 3 valores da sua inst?ncia no painel Z-API.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -746,7 +992,262 @@ export function IntegracoesPanel() {
               Cancelar
             </Button>
             <Button onClick={saveZapi} disabled={zapiSaving}>
-              {zapiSaving ? "Salvando…" : "Salvar"}
+              {zapiSaving ? "Salvando?" : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Teste TSE */}
+      <Dialog open={tseTestOpen} onOpenChange={setTseTestOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FlaskConical className="h-4 w-4" /> Testar TSE ? T?tulo e Local de Vota??o
+            </DialogTitle>
+            <DialogDescription>
+              Preencha os dados reais e clique em Consultar. A consulta exige <strong>Data de nascimento</strong> e <strong>Nome da m?e</strong> obrigatoriamente, mais CPF ou T?tulo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1 col-span-2">
+                <Label htmlFor="tse-cpf">CPF <span className="text-muted-foreground text-xs">(ou T?tulo eleitoral abaixo)</span></Label>
+                <Input
+                  id="tse-cpf"
+                  placeholder="000.000.000-00"
+                  value={tseCpf}
+                  onChange={(e) => setTseCpf(e.target.value)}
+                  disabled={tseLoading}
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label htmlFor="tse-titulo">N? do T?tulo Eleitoral <span className="text-muted-foreground text-xs">(alternativa ao CPF)</span></Label>
+                <Input
+                  id="tse-titulo"
+                  placeholder="000000000000"
+                  value={tseTitulo ?? ""}
+                  onChange={(e) => setTseTitulo(e.target.value)}
+                  disabled={tseLoading}
+                  inputMode="numeric"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="tse-nasc">
+                  Data de nascimento <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="tse-nasc"
+                  type="date"
+                  value={tseNasc}
+                  onChange={(e) => setTseNasc(e.target.value)}
+                  disabled={tseLoading}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="tse-mae">
+                  Nome da m?e <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="tse-mae"
+                  placeholder="NOME COMPLETO DA M?E"
+                  value={tseMae}
+                  onChange={(e) => setTseMae(e.target.value.toUpperCase())}
+                  disabled={tseLoading}
+                />
+              </div>
+            </div>
+
+            {tseLoading && (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin shrink-0" />
+                Consultando API TSE?
+              </div>
+            )}
+
+            {tseError && !tseLoading && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm space-y-1">
+                <div className="flex items-center gap-2 font-medium text-destructive">
+                  <XCircle className="h-4 w-4 shrink-0" /> Erro na consulta
+                </div>
+                <p className="text-xs">{tseError}</p>
+              </div>
+            )}
+
+                {tseResult && !tseLoading && (
+              <div className="rounded-md border border-emerald-400/50 bg-emerald-50 dark:bg-emerald-950/20 p-3 space-y-3">
+                <div className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400 text-sm">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" /> Dados retornados pela API TSE
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    ["Nome do eleitor",   tseResult.nome_eleitor],
+                    ["T?tulo eleitoral",  tseResult.titulo_eleitoral],
+                    ["Zona",              tseResult.zona_eleitoral],
+                    ["Se??o",             tseResult.secao_eleitoral],
+                    ["Munic?pio",         tseResult.municipio_eleitoral],
+                    ["UF",                tseResult.uf_eleitoral],
+                    ["Local de vota??o",  tseResult.local_votacao],
+                    ["Logradouro",        tseResult.logradouro_local],
+                    ["Bairro",            tseResult.bairro_local],
+                    ["Pr?xima elei??o",   tseResult.proxima_eleicao],
+                    ["Situa??o eleitoral", tseResult.situacao_eleitoral],
+                    ["Biometria coletada", tseResult.biometria_coletada != null ? (tseResult.biometria_coletada ? "Sim" : "N?o") : null],
+                  ].filter(([, v]) => v != null && String(v).trim() !== "").map(([label, value]) => (
+                    <div key={String(label)} className="space-y-0.5">
+                      <p className="text-muted-foreground uppercase tracking-wide text-[10px]">{label}</p>
+                      <p className="font-medium text-foreground">{String(value)}</p>
+                    </div>
+                  ))}
+                </div>
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-muted-foreground select-none">Resposta completa da API</summary>
+                  <pre className="mt-2 max-h-48 overflow-auto bg-muted/40 rounded p-2 text-[10px]">
+                    {JSON.stringify(tseResult, null, 2)}
+                  </pre>
+                </details>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTseTestOpen(false)}>Fechar</Button>
+            <Button
+              disabled={
+                tseLoading ||
+                (!tseCpf.trim() && !tseTitulo.trim()) ||
+                !tseNasc ||
+                !tseMae.trim()
+              }
+              title={
+                !tseNasc ? "Preencha a data de nascimento (*)" :
+                !tseMae.trim() ? "Preencha o nome da m?e (*)" :
+                (!tseCpf.trim() && !tseTitulo.trim()) ? "Informe o CPF ou o n?mero do t?tulo" : ""
+              }
+              onClick={async () => {
+                setTseLoading(true);
+                setTseResult(null);
+                setTseError(null);
+                try {
+                  const { data, error } = await supabase.functions.invoke("analise-validacao-eleitoral", {
+                    body: {
+                      cpf:    tseCpf.replace(/\D/g, "") || undefined,
+                      titulo: tseTitulo.replace(/\D/g, "") || undefined,
+                      data_nascimento: tseNasc,
+                      nome_mae: tseMae.trim(),
+                    },
+                  });
+                  if (error) {
+                    const ctx = (error as any)?.context;
+                    let msg = error.message;
+                    try {
+                      const p = typeof ctx?.json === "function" ? await ctx.json() : null;
+                      if (p?.motivo) msg = p.motivo;
+                      else if (p?.error) msg = p.error;
+                      else if (p?.erro) msg = p.erro;
+                    } catch { /* ignore */ }
+                    throw new Error(msg);
+                  }
+                  const d = data as any;
+                  if (d?.skipped) throw new Error(d.motivo ?? "Par?metros insuficientes para a consulta TSE.");
+                  if (d?.ok === false) throw new Error(d.erro ?? d._msg ?? "API n?o retornou dados para estes par?metros.");
+                  setTseResult(d?.dados ?? d);
+                } catch (e: any) {
+                  setTseError(e?.message ?? "Falha na consulta");
+                } finally {
+                  setTseLoading(false);
+                }
+              }}
+            >
+              {tseLoading ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-1" />}
+              {tseLoading ? "Consultando?" : "Consultar TSE"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Token TSE */}
+      <Dialog open={infoTokenOpen} onOpenChange={setInfoTokenOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Configurar token ? TSE</DialogTitle>
+            <DialogDescription>
+              Cole o valor do par?metro <code className="bg-muted px-1 rounded">TOKEN</code> que aparece na URL das suas consultas (ex.: URL da consulta "TSE - T?tulo e Local de Vota??o"). O token ? guardado na base de dados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="info-token">Token de API</Label>
+              <Input
+                id="info-token"
+                type="password"
+                placeholder="Cole o token aqui?"
+                value={infoToken}
+                onChange={(e) => setInfoToken(e.target.value)}
+                disabled={infoTokenSaving}
+                autoComplete="off"
+              />
+            </div>
+            {infoTokenResult && (
+              <div className={`rounded border p-2 text-sm flex items-center gap-2 ${infoTokenResult.ok ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-destructive/40 bg-destructive/10 text-destructive"}`}>
+                {infoTokenResult.ok
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  : <XCircle className="h-4 w-4 shrink-0" />}
+                {infoTokenResult.mensagem ?? infoTokenResult.erro}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInfoTokenOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarInfosimplesToken} disabled={infoTokenSaving || !infoToken.trim()}>
+              {infoTokenSaving ? <RefreshCw className="h-4 w-4 mr-1 animate-spin" /> : <KeyRound className="h-4 w-4 mr-1" />}
+              {infoTokenSaving ? "Salvando?" : "Salvar token"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ?? Dialog: URLs dos webhooks Z-API ???????????????????????????????? */}
+      <Dialog open={zapiWebhookOpen} onOpenChange={setZapiWebhookOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Webhook className="h-4 w-4" /> Webhooks Z-API ? URLs para configurar
+            </DialogTitle>
+            <DialogDescription>
+              No painel Z-API ? <strong>Webhooks e configura??es gerais</strong>, preencha os campos abaixo.
+              Ative tamb?m <strong>"Notificar as enviadas por mim tamb?m"</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            {[
+              { label: "Ao enviar",                  url: zapiWebhookUrlReceptivo },
+              { label: "Ao receber",                 url: zapiWebhookUrlReceptivo },
+              { label: "Receber status da mensagem", url: zapiWebhookUrlStatus    },
+              { label: "Ao desconectar",             url: zapiWebhookUrlReceptivo },
+              { label: "Ao conectar",                url: zapiWebhookUrlReceptivo },
+              { label: "Presen?a do chat",           url: zapiWebhookUrlReceptivo },
+            ].map(({ label, url }) => (
+              <div key={label} className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">{label}</p>
+                <div className="flex gap-2 items-center">
+                  <code className="flex-1 rounded bg-muted px-2 py-1 text-[11px] break-all leading-snug">{url}</code>
+                  <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs px-2" onClick={() => copiarUrl(url, label)}>
+                    Copiar
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <div className="rounded border border-primary/30 bg-primary/5 p-3 text-xs space-y-1">
+              <p className="font-medium">Configura??o autom?tica</p>
+              <p className="text-muted-foreground">Clique em <strong>"Gerar Webhook"</strong> no cart?o Z-API para preencher tudo automaticamente ? s? funciona quando a inst?ncia estiver conectada.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setZapiWebhookOpen(false)}>Fechar</Button>
+            <Button onClick={async () => { setZapiWebhookOpen(false); await configurarZapiWebhook(); }} disabled={zapiWebhookLoading}>
+              <Webhook className="h-3 w-3 mr-1" />
+              Configurar automaticamente
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -755,15 +1256,15 @@ export function IntegracoesPanel() {
       <AlertDialog open={zapiDisconnectOpen} onOpenChange={setZapiDisconnectOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conexão Z-API?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir conex?o Z-API?</AlertDialogTitle>
             <AlertDialogDescription>
-              Isso remove a sessão e as credenciais salvas (Instance ID, Token e Client-Token) desta integração.
-              Você poderá configurar a Z-API do zero em seguida.
+              Isso remove a sess?o e as credenciais salvas (Instance ID, Token e Client-Token) desta integra??o.
+              Voc? poder? configurar a Z-API do zero em seguida.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={disconnectZapi}>Excluir conexão</AlertDialogAction>
+            <AlertDialogAction onClick={disconnectZapi}>Excluir conex?o</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -773,14 +1274,14 @@ export function IntegracoesPanel() {
           <DialogHeader>
             <DialogTitle>QR Code da Z-API</DialogTitle>
             <DialogDescription>
-              Atualize e escaneie este QR Code no WhatsApp para reconectar a instância.
+              Atualize e escaneie este QR Code no WhatsApp para reconectar a inst?ncia.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {zapiQrResult?.connected ? (
               <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-lg border border-green-500/40 bg-green-500/10 p-6 text-center">
                 <CheckCircle2 className="h-12 w-12 text-green-600" />
-                <p className="text-base font-semibold text-green-700">WhatsApp conectado com sucesso! ✅</p>
+                <p className="text-base font-semibold text-green-700">WhatsApp conectado com sucesso! ?</p>
                 <p className="text-sm text-muted-foreground">
                   {zapiQrResult.message}
                 </p>
@@ -788,7 +1289,7 @@ export function IntegracoesPanel() {
             ) : zapiQrLoading && !zapiQrResult ? (
               <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/30 p-6 text-center">
                 <RefreshCw className="h-6 w-6 animate-spin" />
-                <p className="text-sm text-muted-foreground">Gerando um novo QR Code…</p>
+                <p className="text-sm text-muted-foreground">Gerando um novo QR Code?</p>
               </div>
             ) : zapiQrResult?.qrImage || zapiQrResult?.qrCode ? (
               <div className="grid gap-4 md:grid-cols-[280px,1fr] md:items-center">
@@ -796,7 +1297,7 @@ export function IntegracoesPanel() {
                   {zapiQrResult.qrImage ? (
                     <img
                       src={zapiQrResult.qrImage}
-                      alt="QR Code atualizado da instância Z-API"
+                      alt="QR Code atualizado da inst?ncia Z-API"
                       className="h-64 w-64 rounded-lg border bg-white p-2"
                     />
                   ) : (
@@ -817,10 +1318,10 @@ export function IntegracoesPanel() {
                     <RefreshCw className={`h-3 w-3 ${zapiQrLoading ? "animate-spin" : ""}`} />
                     {zapiAutoRefresh ? (
                       <span>
-                        Atualizando em <strong>{zapiQrCountdown}s</strong>… aguardando conexão.
+                        Atualizando em <strong>{zapiQrCountdown}s</strong>? aguardando conex?o.
                       </span>
                     ) : (
-                      <span>Auto-atualização pausada.</span>
+                      <span>Auto-atualiza??o pausada.</span>
                     )}
                     <Button
                       size="sm"
@@ -835,9 +1336,9 @@ export function IntegracoesPanel() {
               </div>
             ) : (
               <div className="space-y-3 rounded-lg border p-4">
-                <p className="text-sm text-foreground">{zapiQrResult?.message ?? "Nenhum QR Code disponível."}</p>
+                <p className="text-sm text-foreground">{zapiQrResult?.message ?? "Nenhum QR Code dispon?vel."}</p>
                 {zapiQrResult?.connected && (
-                  <p className="text-sm text-muted-foreground">A instância já está conectada, então não foi necessário gerar um novo QR.</p>
+                  <p className="text-sm text-muted-foreground">A inst?ncia j? est? conectada, ent?o n?o foi necess?rio gerar um novo QR.</p>
                 )}
                 {!zapiQrResult?.connected && (
                   <div className="space-y-1">
@@ -854,7 +1355,7 @@ export function IntegracoesPanel() {
             <Button variant="outline" onClick={() => setZapiQrOpen(false)}>Fechar</Button>
             <Button onClick={() => atualizarQrCodeZapi()} disabled={zapiQrLoading}>
               <QrCode className="h-4 w-4 mr-1" />
-              {zapiQrLoading ? "Atualizando…" : "Gerar novamente"}
+              {zapiQrLoading ? "Atualizando?" : "Gerar novamente"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -865,10 +1366,10 @@ export function IntegracoesPanel() {
           <DialogHeader>
             <DialogTitle>
               {zapiTestResult?.state === "success"
-                ? "Teste Z-API · Sucesso"
+                ? "Teste Z-API ? Sucesso"
                 : zapiTestResult?.state === "warning"
-                  ? "Teste Z-API · Aguardando conexão"
-                  : "Teste Z-API · Falha"}
+                  ? "Teste Z-API ? Aguardando conex?o"
+                  : "Teste Z-API ? Falha"}
             </DialogTitle>
             <DialogDescription>{zapiTestResult?.title}</DialogDescription>
           </DialogHeader>
@@ -882,14 +1383,14 @@ export function IntegracoesPanel() {
               if (zapiTestResult?.state === "warning" && qrImage) {
                 return (
                   <div className="flex flex-col items-center gap-2 rounded border bg-background p-3">
-                    <Label>QR Code · escaneie no WhatsApp</Label>
+                    <Label>QR Code ? escaneie no WhatsApp</Label>
                     <img
                       src={qrImage}
                       alt="QR Code Z-API"
                       className="h-56 w-56 rounded border bg-white p-2"
                     />
                     <p className="text-xs text-muted-foreground text-center">
-                      Abra o WhatsApp → Aparelhos conectados → Conectar um aparelho.
+                      Abra o WhatsApp ? Aparelhos conectados ? Conectar um aparelho.
                     </p>
                   </div>
                 );
@@ -926,7 +1427,7 @@ export function IntegracoesPanel() {
           <DialogHeader>
             <DialogTitle>Testar enriquecimento por CPF</DialogTitle>
             <DialogDescription>
-              Consulta a API SA Connect Data em modo preview (não cria eleitor, não cobra de cota se já houver cache).
+              Consulta a API SA Connect Data em modo preview (n?o cria eleitor, n?o cobra de cota se j? houver cache).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -945,7 +1446,7 @@ export function IntegracoesPanel() {
                 onClick={async () => {
                   const cpf = enrichCpf.replace(/\D/g, "");
                   if (cpf.length !== 11) {
-                    toast.error("Informe um CPF com 11 dígitos");
+                    toast.error("Informe um CPF com 11 d?gitos");
                     return;
                   }
                   setEnrichLoading(true);
@@ -1011,7 +1512,7 @@ export function IntegracoesPanel() {
                 {enrichErrorMeta?.http_status ? (
                   <div className="text-xs text-muted-foreground">
                     HTTP {enrichErrorMeta.http_status}
-                    {enrichErrorMeta.provedor ? ` · provedor: ${enrichErrorMeta.provedor}` : ""}
+                    {enrichErrorMeta.provedor ? ` ? provedor: ${rotuloProvedorEnriquecimentoUi(enrichErrorMeta.provedor)}` : ""}
                   </div>
                 ) : null}
                 {enrichErrorMeta?.oauth_endpoint && (
@@ -1022,14 +1523,14 @@ export function IntegracoesPanel() {
                 )}
                 {enrichErrorMeta?.dica && (
                   <div className="text-xs rounded border bg-background/60 p-2 text-foreground">
-                    💡 {enrichErrorMeta.dica}
+                    ?? {ocultarAssertivaEmTextoUi(String(enrichErrorMeta.dica))}
                   </div>
                 )}
                 {enrichErrorMeta?.details ? (
                   <details className="text-xs">
                     <summary className="cursor-pointer select-none text-muted-foreground">Detalhes da resposta</summary>
                     <pre className="mt-1 max-h-48 overflow-auto bg-muted/40 p-2 rounded">
-{JSON.stringify(enrichErrorMeta.details, null, 2)}
+{sanitizarJsonTextoCliente(enrichErrorMeta.details)}
                     </pre>
                   </details>
                 ) : null}
@@ -1043,12 +1544,12 @@ export function IntegracoesPanel() {
                     ["Nome", enrichResult?.dados?.nome_completo],
                     ["CPF", enrichResult?.dados?.cpf],
                     ["Data nasc.", enrichResult?.dados?.data_nascimento],
-                    ["Nome da mãe", enrichResult?.dados?.nome_mae],
-                    ["Título eleitoral", enrichResult?.dados?.titulo_eleitoral],
-                    ["Município eleitoral", enrichResult?.dados?.municipio_eleitoral],
+                    ["Nome da m?e", enrichResult?.dados?.nome_mae],
+                    ["T?tulo eleitoral", enrichResult?.dados?.titulo_eleitoral],
+                    ["Munic?pio eleitoral", enrichResult?.dados?.municipio_eleitoral],
                     ["E-mail", enrichResult?.dados?.email],
                     ["Logradouro", enrichResult?.dados?.endereco?.logradouro],
-                    ["Número", enrichResult?.dados?.endereco?.numero],
+                    ["N?mero", enrichResult?.dados?.endereco?.numero],
                     ["Bairro", enrichResult?.dados?.endereco?.bairro],
                     ["Cidade", enrichResult?.dados?.endereco?.cidade],
                     ["UF", enrichResult?.dados?.endereco?.uf],
@@ -1056,7 +1557,7 @@ export function IntegracoesPanel() {
                   ].map(([label, value]) => (
                     <div key={label as string} className="space-y-1">
                       <Label className="text-xs text-muted-foreground">{label}</Label>
-                      <Input value={(value as string) ?? ""} readOnly placeholder="—" />
+                      <Input value={(value as string) ?? ""} readOnly placeholder="?" />
                     </div>
                   ))}
                 </div>
@@ -1069,15 +1570,23 @@ export function IntegracoesPanel() {
                     <Badge>{enrichResult.divergencia.status_sugerido}</Badge>
                   )}
                   {enrichResult?.oauth_endpoint && (
-                    <Badge variant="outline" className="font-mono">
-                      OAuth: {new URL(enrichResult.oauth_endpoint).host}
+                    <Badge variant="outline" className="font-mono text-[10px] leading-tight max-w-full truncate" title={enrichResult.oauth_endpoint}>
+                      OAuth: {enrichResult.oauth_endpoint.startsWith("http")
+                        ? (() => {
+                          try {
+                            return `${new URL(enrichResult.oauth_endpoint).pathname} (SA Connect Data)`;
+                          } catch {
+                            return "SA Connect Data";
+                          }
+                        })()
+                        : enrichResult.oauth_endpoint}
                     </Badge>
                   )}
                 </div>
                 <details className="rounded border bg-muted/40 p-2 text-xs">
                   <summary className="cursor-pointer select-none">Resposta bruta</summary>
                   <pre className="mt-2 max-h-72 overflow-auto">
-{JSON.stringify(enrichResult, null, 2)}
+{sanitizarJsonTextoCliente(enrichResult)}
                   </pre>
                 </details>
               </div>
@@ -1095,7 +1604,7 @@ export function IntegracoesPanel() {
           <DialogHeader>
             <DialogTitle>Testar SA Connect Data por telefone</DialogTitle>
             <DialogDescription>
-              Consulta o provedor em tempo real e mostra os dados retornados. Nenhum eleitor é alterado.
+              Consulta o provedor em tempo real e mostra os dados retornados. Nenhum eleitor ? alterado.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto pr-1">
@@ -1113,10 +1622,16 @@ export function IntegracoesPanel() {
           <DialogHeader>
             <DialogTitle>Validar credenciais SA Connect Data</DialogTitle>
             <DialogDescription>
-              Cole o Client ID e o Client Secret do painel da SA Connect Data para testar o OAuth2 na hora.
-              Os valores não são salvos — após validar, peça ao Lovable para atualizar os secrets
-              <code className="mx-1">ANALISE_ELEITORAL_API_USER</code> e
-              <code className="ml-1">ANALISE_ELEITORAL_API_PASSWORD</code>.
+              Cole o Client ID e o Client Secret do painel da SA Connect Data para testar o OAuth2.
+              <strong className="block mt-2"> Salvar credenciais</strong> grava na tabela{" "}
+              <code className="rounded bg-muted px-1">analise_provedor_credenciais</code> (apenas{" "}
+              <strong>super admin</strong>) e exige a vari?vel de ambiente{" "}
+              <code className="rounded bg-muted px-1">SUPABASE_SERVICE_ROLE_KEY</code> na Edge Function{" "}
+              <code className="rounded bg-muted px-1">analise-enriquecimento</code> (o Supabase costuma injetar
+              automaticamente). Alternativa: defina os secrets{" "}
+              <code className="mx-1">ANALISE_ELEITORAL_API_USER</code> e{" "}
+              <code className="ml-1">ANALISE_ELEITORAL_API_PASSWORD</code> no painel do projeto.
+              Depois de salvar, clique em <strong>Atualizar</strong> na lista de integra??es.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -1166,9 +1681,9 @@ export function IntegracoesPanel() {
                   if (error) throw error;
                   setCredResult(data);
                   if (data?.ok) {
-                    toast.success("Credenciais válidas!");
+                    toast.success("Credenciais v?lidas!");
                   } else {
-                    toast.error(data?.erro ?? "Credenciais inválidas");
+                    toast.error(data?.erro ?? "Credenciais inv?lidas");
                   }
                 } catch (e) {
                   setCredResult({
@@ -1204,21 +1719,15 @@ export function IntegracoesPanel() {
                     <XCircle className="h-4 w-4 text-destructive" />
                   )}
                   {credResult.ok
-                    ? credResult.mensagem ?? "Credenciais válidas"
-                    : credResult.erro ?? "Falha na validação"}
+                    ? credResult.mensagem ?? "Credenciais v?lidas"
+                    : credResult.erro ?? "Falha na valida??o"}
                 </div>
                 {credResult.http_status ? (
                   <div className="text-xs text-muted-foreground">
                     HTTP {credResult.http_status}
-                    {credResult.duracao_ms ? ` · ${credResult.duracao_ms}ms` : ""}
+                    {credResult.duracao_ms ? ` ? ${credResult.duracao_ms}ms` : ""}
                   </div>
                 ) : null}
-                {credResult.oauth_endpoint && (
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Endpoint: </span>
-                    <code className="bg-muted px-1 py-0.5 rounded">{credResult.oauth_endpoint}</code>
-                  </div>
-                )}
                 {credResult.expires_in && (
                   <div className="text-xs text-muted-foreground">
                     Token expira em {credResult.expires_in}s
@@ -1226,7 +1735,7 @@ export function IntegracoesPanel() {
                 )}
                 {credResult.dica && !credResult.ok && (
                   <div className="text-xs rounded border bg-background/60 p-2 text-foreground">
-                    💡 {credResult.dica}
+                    ?? {ocultarAssertivaEmTextoUi(String(credResult.dica))}
                   </div>
                 )}
                 {credResult.detalhes ? (
@@ -1235,7 +1744,7 @@ export function IntegracoesPanel() {
                       Resposta do provedor
                     </summary>
                     <pre className="mt-1 max-h-48 overflow-auto bg-muted/40 p-2 rounded">
-{JSON.stringify(credResult.detalhes, null, 2)}
+{sanitizarJsonTextoCliente(credResult.detalhes)}
                     </pre>
                   </details>
                 ) : null}
@@ -1260,9 +1769,10 @@ export function IntegracoesPanel() {
                         if (error) throw error;
                         if (data?.ok) {
                           setCredSaved(true);
-                          toast.success("Credenciais salvas! A API já vai usar esses valores.");
+                          toast.success("Credenciais salvas na base. Clique em Atualizar se o cart?o n?o mudar.");
+                          await refetch();
                         } else {
-                          toast.error(data?.error ?? "Falha ao salvar");
+                          toast.error(data?.error ?? data?.erro ?? "Falha ao salvar");
                         }
                       } catch (e) {
                         toast.error(e instanceof Error ? e.message : "Falha ao salvar");

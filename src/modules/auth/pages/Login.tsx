@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Vote, Mail, Lock, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ const MIN_SUBMIT_INTERVAL_MS = 1200;
 
 export default function Login() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { session, profile, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -37,24 +36,6 @@ export default function Login() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
   const [stuckTooLong, setStuckTooLong] = useState(false);
-
-  // Mensagens contextuais quando o utilizador chega aqui por logout forçado
-  useEffect(() => {
-    const reason = searchParams.get("reason");
-    if (!reason) return;
-    if (reason === "idle") {
-      toast.warning("Sua sessão expirou por inatividade. Faça login novamente.");
-    } else if (reason === "replaced") {
-      toast.error("Sessão encerrada: o seu usuário entrou em outro dispositivo.");
-    } else if (reason === "revoked") {
-      toast.error("Sua sessão foi encerrada por segurança. Faça login novamente.");
-    }
-    // limpa o param para não repetir
-    const next = new URLSearchParams(searchParams);
-    next.delete("reason");
-    setSearchParams(next, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     authLog("info", "login.mount", {

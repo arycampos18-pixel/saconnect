@@ -7,11 +7,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { analiseService } from "../services/analiseService";
 import { CPFInput } from "./CPFInput";
 import { isValidCPF, onlyDigits } from "../utils/cpf";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EleitorHistorico } from "./EleitorHistorico";
+import { CheckCircle2, Copy, AlertTriangle } from "lucide-react";
 
 type Eleitor = any;
 
@@ -114,23 +116,91 @@ export function EleitorEditDialog({
 
           <TabsContent value="dados" className="mt-4">
             <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <CPFInput value={cpf} onChange={setCpf} error={cpfBlocking ? "CPF inválido" : undefined} />
-          </div>
-          {FIELDS.map((f) => (
-            <div key={f.key} className="space-y-1">
-              <Label htmlFor={f.key}>{f.label}</Label>
-              <Input
-                id={f.key}
-                type={f.type ?? "text"}
-                placeholder={f.placeholder}
-                value={form[f.key] ?? ""}
-                onChange={(e) => set(f.key, e.target.value)}
-                disabled={f.key === "telefone_original"}
-              />
-              {errors[f.key] && <p className="text-xs text-destructive">{errors[f.key]}</p>}
-            </div>
-          ))}
+              <div className="space-y-1">
+                <CPFInput value={cpf} onChange={setCpf} error={cpfBlocking ? "CPF inválido" : undefined} />
+              </div>
+
+              {FIELDS.map((f) => {
+                // Campo especial: Nome completo — mostra o nome do SA Connect Data ao lado
+                if (f.key === "nome") {
+                  const nomeApi = (eleitor as any)?.nome_api as string | null | undefined;
+                  const nomeManual = form["nome"] ?? "";
+                  const igualApi = nomeApi && nomeManual.trim().toLowerCase() === nomeApi.trim().toLowerCase();
+                  const temDivergencia = nomeApi && !igualApi;
+
+                  return (
+                    <div key="nome" className="space-y-1 sm:col-span-2">
+                      <Label htmlFor="nome">Nome completo *</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="nome"
+                          value={nomeManual}
+                          onChange={(e) => set("nome", e.target.value)}
+                          className={temDivergencia ? "border-amber-400 focus-visible:ring-amber-400" : ""}
+                          placeholder="Nome conforme cadastro"
+                        />
+                      </div>
+                      {errors["nome"] && <p className="text-xs text-destructive">{errors["nome"]}</p>}
+
+                      {/* Bloco de comparação com o SA Connect Data */}
+                      {nomeApi && (
+                        <div className={`mt-1 rounded-md border px-3 py-2 text-sm flex items-start gap-2 ${
+                          igualApi
+                            ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20"
+                            : "border-amber-300 bg-amber-50 dark:bg-amber-950/20"
+                        }`}>
+                          <div className="mt-0.5 shrink-0">
+                            {igualApi
+                              ? <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              : <AlertTriangle className="h-4 w-4 text-amber-600" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-muted-foreground mb-0.5">
+                              SA Connect Data retornou:
+                            </div>
+                            <div className="font-medium break-words">{nomeApi}</div>
+                            {igualApi && (
+                              <Badge variant="outline" className="mt-1 text-[10px] text-emerald-700 border-emerald-400">
+                                Nomes idênticos ✓
+                              </Badge>
+                            )}
+                          </div>
+                          {temDivergencia && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="shrink-0 h-7 text-xs"
+                              onClick={() => {
+                                set("nome", nomeApi);
+                                toast.info("Nome copiado do SA Connect Data. Salve para confirmar.");
+                              }}
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              Usar este
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={f.key} className="space-y-1">
+                    <Label htmlFor={f.key}>{f.label}</Label>
+                    <Input
+                      id={f.key}
+                      type={f.type ?? "text"}
+                      placeholder={f.placeholder}
+                      value={form[f.key] ?? ""}
+                      onChange={(e) => set(f.key, e.target.value)}
+                      disabled={f.key === "telefone_original"}
+                    />
+                    {errors[f.key] && <p className="text-xs text-destructive">{errors[f.key]}</p>}
+                  </div>
+                );
+              })}
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
               O telefone oficial não pode ser alterado por aqui — é o telefone original do cadastro.

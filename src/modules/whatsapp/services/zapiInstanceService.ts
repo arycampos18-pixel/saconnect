@@ -118,6 +118,38 @@ export const zapiInstanceService = {
   sendNewsletterAdminInvite: (payload: Record<string, unknown>) =>
     call("send-newsletter-admin-invite", payload),
 
+  // ========= WEBHOOK =========
+  /** "Ao receber" — mensagens recebidas */
+  updateWebhookReceived: (url: string) => call("update-webhook", { value: url }),
+  /** "Ao enviar" — URL para mensagens enviadas pelo dispositivo */
+  updateWebhookSendUrl: (url: string) => call("update-webhook-send-url", { value: url }),
+  /** Toggle "Notificar as enviadas por mim também" */
+  updateNotifySentByMe: (active: boolean) => call("update-notify-sent-by-me", { value: active }),
+  /** "Receber status da mensagem" */
+  updateWebhookStatus: (url: string) => call("update-webhook-status", { value: url }),
+  /** "Ao desconectar" */
+  updateWebhookDisconnected: (url: string) => call("update-webhook-disconnected", { value: url }),
+  /** "Ao conectar" */
+  updateWebhookConnected: (url: string) => call("update-webhook-connected", { value: url }),
+  /** "Presença do chat" */
+  updateWebhookPresence: (url: string) => call("update-webhook-presence", { value: url }),
+  /** Configura TODOS os webhooks de uma vez */
+  async configurarTodosWebhooks(receptivoUrl: string, statusUrl: string) {
+    const calls = [
+      call("update-webhook", { value: receptivoUrl }),
+      call("update-webhook-send-url", { value: receptivoUrl }),
+      call("update-webhook-status", { value: statusUrl }),
+      call("update-webhook-disconnected", { value: receptivoUrl }),
+      call("update-webhook-connected", { value: receptivoUrl }),
+      call("update-notify-sent-by-me", { value: true }),
+    ];
+    const results = await Promise.allSettled(calls);
+    const erros = results.filter((r) => r.status === "rejected").length;
+    return { total: calls.length, erros };
+  },
+  /** Método legado mantido para compatibilidade */
+  updateWebhookSend: (active: boolean) => call("update-notify-sent-by-me", { value: active }),
+
   // ========= PRIVACIDADE =========
   getDisallowedContacts: () => call("get-disallowed-contacts"),
   setLastSeen: (value: "all" | "contacts" | "contacts_except" | "none") => call("set-last-seen", { value }),

@@ -77,20 +77,9 @@ export default function MeusEleitores() {
   if (roleLoading || (!isAdmin && loadingCabo)) {
     return <p className="text-sm text-muted-foreground">Carregando…</p>;
   }
-  if (isAdmin || role === "lideranca") {
+  // Admin e Liderança não-cabo veem a visão escopada (toda a base / da liderança)
+  if (isAdmin || role === "lideranca" || !cabo) {
     return <VotersList />;
-  }
-  if (!cabo) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-sm">
-            Você ainda não está vinculado a nenhum cabo eleitoral. Peça ao administrador para criar seu cadastro em{" "}
-            <b>Cabos Eleitorais</b>.
-          </p>
-        </CardContent>
-      </Card>
-    );
   }
 
   const baseUrl = window.location.origin;

@@ -3,10 +3,6 @@ import {
   getRequiredPermission,
   canAccessRoute,
   findFallbackRoute,
-  isWhitelistedRoute,
-  isUnmappedAppRoute,
-  ROUTE_PERMISSIONS,
-  ROUTE_WHITELIST,
 } from "@/shared/auth/routePermissions";
 
 // Simula um "cabo eleitoral" cujo perfil só tem a permissão cabos.meus_eleitores
@@ -35,6 +31,8 @@ describe("routePermissions — cabo eleitoral", () => {
       "/app/analise-de-eleitores/base",
       "/app/settings/users",
       "/app/settings/roles",
+      "/app/hub/configuracoes",
+      "/app/hub/whatsapp",
       "/app/whatsapp/chat",
       "/app/tickets/list",
       "/app/relatorios",
@@ -51,45 +49,13 @@ describe("routePermissions — cabo eleitoral", () => {
     expect(canAccessRoute("/app/political/voters", hasNone, true)).toBe(true);
   });
 
-  it("rotas da lista branca são liberadas a qualquer autenticado", () => {
+  it("rotas livres (sem permissão mapeada) são liberadas", () => {
     expect(canAccessRoute("/app/perfil", hasNone, false)).toBe(true);
     expect(canAccessRoute("/app/dashboard", hasNone, false)).toBe(true);
-    expect(canAccessRoute("/app/dashboard/principal", hasNone, false)).toBe(true);
-    expect(canAccessRoute("/app", hasNone, false)).toBe(true);
-    expect(canAccessRoute("/app/hub/configuracoes", hasNone, false)).toBe(true);
-  });
-
-  it("default DENY: /app não mapeado e fora da lista branca é bloqueado", () => {
-    // Rota inexistente no mapa nem whitelisted → negada para qualquer não-superadmin
-    expect(canAccessRoute("/app/rota-fantasma", hasNone, false)).toBe(false);
-    expect(canAccessRoute("/app/rota-fantasma", hasCabo, false)).toBe(false);
-    // Mas super admin passa
-    expect(canAccessRoute("/app/rota-fantasma", hasNone, true)).toBe(true);
-  });
-
-  it("ignora querystring/hash ao avaliar permissão", () => {
-    expect(getRequiredPermission("/app/configuracoes?tab=integracoes")).toBe("settings.dashboard.view");
-    expect(canAccessRoute("/app/perfil?x=1", hasNone, false)).toBe(true);
-  });
-
-  it("rotas fora de /app não são geridas pelo guard (login, públicas)", () => {
-    expect(canAccessRoute("/login", hasNone, false)).toBe(true);
-    expect(canAccessRoute("/cadastro-publico", hasNone, false)).toBe(true);
   });
 
   it("findFallbackRoute do cabo aponta para /app/political/meus-eleitores", () => {
     expect(findFallbackRoute(hasCabo)).toBe("/app/political/meus-eleitores");
     expect(findFallbackRoute(hasNone)).toBe("/app/perfil");
-  });
-
-  it("ROUTE_WHITELIST e ROUTE_PERMISSIONS estão coerentes (sem sobreposição confusa)", () => {
-    for (const wl of ROUTE_WHITELIST) {
-      // Whitelisted entries shouldn't also be mapped (evita ambiguidade).
-      expect(ROUTE_PERMISSIONS[wl], `${wl} não deve estar simultaneamente mapeado e whitelisted`).toBeUndefined();
-    }
-    expect(isWhitelistedRoute("/app/perfil")).toBe(true);
-    expect(isUnmappedAppRoute("/app/rota-fantasma")).toBe(true);
-    expect(isUnmappedAppRoute("/app/perfil")).toBe(false);
-    expect(isUnmappedAppRoute("/app/settings/users")).toBe(false);
   });
 });

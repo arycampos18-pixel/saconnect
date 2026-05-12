@@ -774,12 +774,25 @@ export const analiseService = {
     const { data, error } = await supabase.functions.invoke("analise-enriquecimento", {
       body: payload,
     });
+    if ((data as any)?.bloqueado) {
+      const err: any = new Error((data as any).error ?? "Limite de consultas atingido");
+      err.bloqueado = true;
+      err.uso = (data as any).uso;
+      throw err;
+    }
     if (error) {
-      // Lê o corpo (pode ser bloqueio por limite — 429)
+      // Tenta extrair a mensagem de erro do corpo da resposta da Edge Function.
       const ctx: any = (error as any).context;
       try {
-        const txt = await ctx?.text?.();
-        const parsed = txt ? JSON.parse(txt) : null;
+        let parsed: any = null;
+        if (ctx) {
+          if (typeof ctx.json === "function") {
+            parsed = await ctx.json();
+          } else if (typeof ctx.text === "function") {
+            const txt = await ctx.text();
+            if (txt) parsed = JSON.parse(txt);
+          }
+        }
         if (parsed?.bloqueado) {
           const err: any = new Error(parsed.error ?? "Limite de consultas atingido");
           err.bloqueado = true;
@@ -787,10 +800,15 @@ export const analiseService = {
           throw err;
         }
         if (parsed?.error) throw new Error(parsed.error);
-      } catch (e) {
-        if ((e as any)?.bloqueado) throw e;
+      } catch (inner: any) {
+        if (
+          inner?.bloqueado ||
+          (inner instanceof Error && inner !== error && inner.message !== (error as any).message)
+        ) {
+          throw inner;
+        }
       }
-      throw error;
+      throw new Error((error as any).message ?? "Falha ao enriquecer eleitor");
     }
     if ((data as any)?.error) throw new Error((data as any).error);
     return data as {

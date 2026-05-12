@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, CheckCircle2, Sparkles, Search, Pencil } from "lucide-react";
+import { MessageCircle, CheckCircle2, Sparkles, Search, Pencil, Vote, Loader2, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { analiseService } from "../services/analiseService";
 import { EleitorFormDialog } from "../components/EleitorFormDialog";
@@ -23,6 +23,84 @@ const sb: any = supabase;
 export default function AnaliseEleitores() {
   const [validar, setValidar] = useState<{ id: string; nome: string; telefone?: string | null; auto?: boolean } | null>(null);
   const [enriquecendoId, setEnriquecendoId] = useState<string | null>(null);
+  const [tseId, setTseId] = useState<string | null>(null);
+  // mapa de estado visual por eleitor: "ok" | "erro" | null
+  const [tseResultado, setTseResultado] = useState<Record<string, "ok" | "erro">>({});
+
+  const consultarTse = useMutation({
+    mutationFn: async (eleitor: any) => {
+      const { data, error } = await supabase.functions.invoke("analise-validacao-eleitoral", {
+        body: { eleitor_id: eleitor.id },
+      });
+      if (error) {
+        const ctx = (error as any)?.context;
+        let msg = error.message;
+        try {
+          const parsed = typeof ctx?.json === "function" ? await ctx.json() : null;
+          if (parsed?.error) msg = parsed.error;
+          if (parsed?.ok === false && parsed?.motivo) msg = parsed.motivo;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      if ((data as any)?.skipped) throw new Error((data as any).motivo ?? "CPF obrigatório para consulta TSE.");
+      if ((data as any)?.ok === false) throw new Error((data as any).erro ?? "Consulta TSE sem resultado.");
+      return data as { ok: boolean; dados: Record<string, any>; duracao_ms: number };
+    },
+    onMutate: (e) => {
+      setTseId(e.id);
+      setTseResultado((prev) => { const n = { ...prev }; delete n[e.id]; return n; });
+    },
+    onSettled: () => setTseId(null),
+    onSuccess: (r, eleitor) => {
+      const d = r?.dados ?? {};
+      const campos: string[] = [];
+      if (d.titulo_eleitoral)    campos.push("título");
+      if (d.zona_eleitoral)      campos.push("zona");
+      if (d.secao_eleitoral)     campos.push("seção");
+      if (d.municipio_eleitoral) campos.push("município");
+      if (d.local_votacao)       campos.push("local de votação");
+      if (d.situacao_eleitoral)  campos.push("situação");
+      if (campos.length > 0) {
+        toast.success(`TSE OK · ${campos.join(", ")} preenchido(s).`, { duration: 4000 });
+        setTseResultado((prev) => ({ ...prev, [eleitor.id]: "ok" }));
+      } else {
+        toast.info("TSE consultado — nenhum dado novo para preencher.", { duration: 4000 });
+        setTseResultado((prev) => ({ ...prev, [eleitor.id]: "ok" }));
+      }
+
+      // Patch com os dados confirmados pela BD (evita race condition do invalidateQueries)
+      const patch = (r?.dados as any)?._patch_aplicado ?? {};
+      const merge = {
+        titulo_eleitoral:    patch.titulo_eleitoral    ?? (r?.dados as any)?.titulo_eleitoral,
+        zona_eleitoral:      patch.zona_eleitoral      ?? (r?.dados as any)?.zona_eleitoral,
+        secao_eleitoral:     patch.secao_eleitoral     ?? (r?.dados as any)?.secao_eleitoral,
+        local_votacao:       patch.local_votacao       ?? (r?.dados as any)?.local_votacao,
+        municipio_eleitoral: patch.municipio_eleitoral ?? (r?.dados as any)?.municipio_eleitoral,
+        uf_eleitoral:        patch.uf_eleitoral        ?? (r?.dados as any)?.uf_eleitoral,
+      };
+      // Actualiza o diálogo de edição se estiver aberto para este eleitor
+      setEditar((prev: any) => {
+        if (!prev || prev.id !== eleitor.id) return prev;
+        return { ...prev, ...merge };
+      });
+      // Actualiza também a linha no cache para que ao abrir "Editar" depois, os dados estejam frescos
+      qc.setQueriesData(
+        { queryKey: ["analise-eleitores"] },
+        (old: any) => Array.isArray(old)
+          ? old.map((row: any) => row.id === eleitor.id ? { ...row, ...merge } : row)
+          : old,
+      );
+
+      qc.invalidateQueries({ queryKey: ["analise-eleitores"] });
+      setTimeout(() => setTseResultado((prev) => { const n = { ...prev }; delete n[eleitor.id]; return n; }), 4500);
+    },
+    onError: (e: any, eleitor) => {
+      const msg = e?.message ?? "Falha na consulta TSE";
+      toast.error("TSE: " + msg, { duration: 6000 });
+      setTseResultado((prev) => ({ ...prev, [eleitor.id]: "erro" }));
+      setTimeout(() => setTseResultado((prev) => { const n = { ...prev }; delete n[eleitor.id]; return n; }), 5000);
+    },
+  });
   const [detalhe, setDetalhe] = useState<any | null>(null);
   const [editar, setEditar] = useState<any | null>(null);
 
@@ -213,6 +291,37 @@ export default function AnaliseEleitores() {
                           <Sparkles className="h-3 w-3 mr-1" />
                           {enriquecendoId === e.id ? "…" : "Enriquecer"}
                         </Button>
+                        {(() => {
+                          const loading = tseId === e.id;
+                          const resultado = tseResultado[e.id];
+                          return (
+                            <Button
+                              size="sm"
+                              variant={resultado === "ok" ? "default" : resultado === "erro" ? "destructive" : "outline"}
+                              disabled={loading}
+                              title="Consultar título eleitoral, zona, seção e local de votação via TSE"
+                              onClick={() => consultarTse.mutate(e)}
+                              className={
+                                resultado === "ok"
+                                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                                  : resultado === "erro"
+                                  ? ""
+                                  : ""
+                              }
+                            >
+                              {loading ? (
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              ) : resultado === "ok" ? (
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                              ) : resultado === "erro" ? (
+                                <XCircle className="h-3 w-3 mr-1" />
+                              ) : (
+                                <Vote className="h-3 w-3 mr-1" />
+                              )}
+                              {loading ? "Consultando…" : resultado === "ok" ? "TSE ✓" : resultado === "erro" ? "TSE ✗" : "TSE"}
+                            </Button>
+                          );
+                        })()}
                         <Button size="sm" variant="outline" onClick={() => setEditar(e)}>
                           <Pencil className="h-3 w-3 mr-1" /> Editar
                         </Button>

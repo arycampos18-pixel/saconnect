@@ -104,6 +104,59 @@ function gerarDicaOAuth(http_status: number, erro?: string, raw?: unknown): stri
   return null;
 }
 
+/** Rótulo público nas respostas JSON (evita expor hostname comercial do provedor). */
+const ROTULO_PROVEDOR_ENRIQUECIMENTO = "SA Connect Data";
+
+function oauthEndpointRespostaPublica(absUrl: string): string {
+  try {
+    return `${new URL(absUrl).pathname} (${ROTULO_PROVEDOR_ENRIQUECIMENTO})`;
+  } catch {
+    return `(${ROTULO_PROVEDOR_ENRIQUECIMENTO})`;
+  }
+}
+
+/** Sanitiza campos expostos ao browser (mantém host real só em logs internos / DB). */
+function metaProvedorRespostaCliente(provedorHost: string, oauthAbs: string | null): {
+  provedor: string;
+  oauth_endpoint: string | null;
+} {
+  const ocultar = provedorHost.toLowerCase().includes("assertivasolucoes")
+    || (oauthAbs?.toLowerCase().includes("assertivasolucoes") ?? false);
+  if (!ocultar) {
+    return { provedor: provedorHost, oauth_endpoint: oauthAbs };
+  }
+  return {
+    provedor: ROTULO_PROVEDOR_ENRIQUECIMENTO,
+    oauth_endpoint: oauthAbs ? oauthEndpointRespostaPublica(oauthAbs) : null,
+  };
+}
+
+/** Qualquer string em JSON ao cliente: remove o identificador comercial do host (substring). */
+const RE_ASSERTIVA_SUBSTRING = /assertivasolucoes/gi;
+
+function sanitizarJsonCliente<T>(data: T): T {
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") {
+      return RE_ASSERTIVA_SUBSTRING.test(v) ? v.replace(RE_ASSERTIVA_SUBSTRING, "provedor-cadastral") : v;
+    }
+    if (v === null || v === undefined) return v;
+    if (typeof v !== "object") return v;
+    if (Array.isArray(v)) return v.map(walk);
+    const o = v as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(o)) out[k] = walk(val);
+    return out;
+  };
+  return walk(data) as T;
+}
+
+function jsonRes(data: unknown, status = 200) {
+  return new Response(JSON.stringify(sanitizarJsonCliente(data)), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 function resolveProvedorApiHost(base?: string | null): string {
   if (!base) return "api.assertivasolucoes.com.br";
   try {
@@ -124,13 +177,12 @@ async function obterTokenProvedor(): Promise<
   const creds = await lerCredenciaisProvedor();
   const user = creds.user;
   const pass = creds.pass;
+  // URL vazia: mesmo comportamento do modal de validação — host OAuth padrão Assertiva.
   const base = (Deno.env.get("ANALISE_ELEITORAL_API_URL") ?? "")
+    .trim()
     .replace(/\/+$/, "");
   if (!user || !pass) {
-    return { ok: false, http_status: 0, erro: "Credenciais OAuth2 ausentes (USER/PASSWORD)" };
-  }
-  if (!base) {
-    return { ok: false, http_status: 0, erro: "ANALISE_ELEITORAL_API_URL não configurada" };
+    return { ok: false, http_status: 0, erro: "Credenciais OAuth2 ausentes (USER/PASSWORD ou credenciais salvas na base)" };
   }
   if (cachedToken && cachedToken.expira_em - 30_000 > Date.now()) {
     return { ok: true, token: cachedToken.value, cached: true };
@@ -139,7 +191,7 @@ async function obterTokenProvedor(): Promise<
   // independente da URL configurada (que pode apontar p/ docs/sandbox).
   // Extraímos só o host e forçamos `api.assertivasolucoes.com.br` quando
   // o usuário colou a URL de documentação (`integracao...` ou `/v3/doc`).
-  const host = resolveProvedorApiHost(base);
+  const host = resolveProvedorApiHost(base || null);
   const tokenUrl = `https://${host}/oauth2/v3/token`;
   // Exposto p/ logs/diagnóstico (último endpoint usado nesta instância)
   ultimoOauthEndpoint = tokenUrl;
@@ -192,18 +244,23 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
   duracao_ms: number;
   erro?: string;
 }> {
-  const url = Deno.env.get("ANALISE_ELEITORAL_API_URL"); // opcional (provedor real)
-  const user = Deno.env.get("ANALISE_ELEITORAL_API_USER");
-  const pass = Deno.env.get("ANALISE_ELEITORAL_API_PASSWORD");
+  const creds = await lerCredenciaisProvedor();
+  const user = creds.user;
+  const pass = creds.pass;
+  const envUrl = (Deno.env.get("ANALISE_ELEITORAL_API_URL") ?? "").trim().replace(/\/+$/, "");
   const started = Date.now();
 
-  if (!url || !user || !pass) {
-    // Modo simulado: provedor ainda não configurado.
+  if (!user || !pass) {
+    // Sem OAuth2 (secrets nem tabela analise_provedor_credenciais).
     return {
       ok: true,
       billable: false,
       http_status: 200,
-      raw: { mock: true, motivo: "Provedor não configurado (URL + client_id/client_secret OAuth2 ausentes)" },
+      raw: {
+        mock: true,
+        motivo:
+          "Provedor não configurado (client_id/client_secret ausentes em secrets ou na tabela analise_provedor_credenciais).",
+      },
       result: {},
       provedor: "mock",
       duracao_ms: Date.now() - started,
@@ -213,17 +270,15 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
   try {
     // 1) Obter (ou reaproveitar) Bearer via OAuth2 client_credentials.
     const tok = await obterTokenProvedor();
+    const host = resolveProvedorApiHost(envUrl || null);
     if (!tok.ok) {
       return {
         ok: false, billable: false, http_status: tok.http_status, raw: (tok as any).raw ?? null,
-        result: {}, provedor: new URL(url).host,
+        result: {}, provedor: host,
         duracao_ms: Date.now() - started, erro: tok.erro,
       };
     }
     // 2) Endpoints SA Connect Data Localize v3.
-    //    Mesma normalização do token: força `api.assertivasolucoes.com.br`
-    //    se o usuário colou a URL do portal de docs/sandbox.
-    const host = resolveProvedorApiHost(url);
     const v3 = `https://${host}/localize/v3`;
     const fullUrl = payload.cpf
       ? `${v3}/cpf?cpf=${encodeURIComponent(payload.cpf)}&idFinalidade=1`
@@ -396,21 +451,34 @@ Deno.serve(async (req: Request) => {
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Não autenticado" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ error: "Não autenticado" }, 401);
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+
+    // Decodifica o payload do JWT localmente para evitar round-trip ao servidor
+    // Auth (que falha com "Session from session_id claim in JWT does not exist"
+    // quando a sessão já foi expirada na tabela auth.sessions).
+    // Segurança mantida: todas as queries usam o JWT via RLS.
+    const _jwtRaw = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const _userId = (() => {
+      try {
+        // JWTs usam base64url (-/_); atob() só aceita base64 padrão (+//).
+        const part = (_jwtRaw.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+        const padded = part + "=".repeat((4 - part.length % 4) % 4);
+        const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+        const sub = payload.sub ?? payload.user_id;
+        return typeof sub === "string" && sub.length > 0 ? sub : null;
+      } catch {
+        return null;
+      }
+    })();
+    if (!_userId) {
+      return jsonRes({ error: "Token inválido ou ausente." }, 401);
     }
-    const uid = (): string => userData.user!.id;
+    const uid = (): string => _userId;
 
     const body = await req.json().catch(() => ({})) as {
       eleitor_id?: string; cpf?: string; telefone?: string; ping?: boolean;
@@ -422,42 +490,32 @@ Deno.serve(async (req: Request) => {
     // `analise_provedor_credenciais`. Apenas super admins.
     if (body.save_credentials) {
       // Confere super admin
-      const { data: superData } = await supabase.rpc("is_super_admin", { _user_id: userData.user.id });
+      const { data: superData } = await supabase.rpc("is_super_admin", { _user_id: uid() });
       if (!superData) {
-        return new Response(JSON.stringify({ error: "Apenas super admins podem salvar credenciais" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: "Apenas super admins podem salvar credenciais" }, 403);
       }
       const cid = (body.client_id ?? "").trim();
       const csec = (body.client_secret ?? "").trim();
       if (!cid || !csec) {
-        return new Response(JSON.stringify({ error: "Informe Client ID e Client Secret." }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: "Informe Client ID e Client Secret." }, 400);
       }
       const srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
       if (!srk) {
-        return new Response(JSON.stringify({ error: "Service role indisponível" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: "Service role indisponível" }, 500);
       }
       const admin = createClient(SUPABASE_URL, srk);
       const { error: upErr } = await admin
         .from("analise_provedor_credenciais")
         .upsert(
-          { provedor: "assertiva", client_id: cid, client_secret: csec, updated_by: userData.user.id, updated_at: new Date().toISOString() },
+          { provedor: "assertiva", client_id: cid, client_secret: csec, updated_by: uid(), updated_at: new Date().toISOString() },
           { onConflict: "provedor" },
         );
       if (upErr) {
-        return new Response(JSON.stringify({ error: upErr.message }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonRes({ error: upErr.message }, 500);
       }
       // Limpa o cache do token p/ forçar uso das novas credenciais
       cachedToken = null;
-      return new Response(JSON.stringify({ ok: true, mensagem: "Credenciais salvas com sucesso." }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonRes({ ok: true, mensagem: "Credenciais salvas com sucesso." }, 200);
     }
 
     // Modo VALIDATE: testa um par client_id/client_secret informado no body
@@ -468,9 +526,9 @@ Deno.serve(async (req: Request) => {
       const csec = (body.client_secret ?? "").trim();
       const modo = "oauth2_client_credentials";
       if (!cid || !csec) {
-        return new Response(JSON.stringify({
+        return jsonRes({
           ok: false, modo, erro: "Informe Client ID e Client Secret para validar.",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }, 200);
       }
       const tokenUrl = "https://api.assertivasolucoes.com.br/oauth2/v3/token";
       const started = Date.now();
@@ -490,78 +548,85 @@ Deno.serve(async (req: Request) => {
         const raw = await resp.json().catch(() => ({}));
         const dur = Date.now() - started;
         if (!resp.ok) {
-          return new Response(JSON.stringify({
-            ok: false, modo, oauth_endpoint: tokenUrl,
+          return jsonRes({
+            ok: false, modo, oauth_endpoint: oauthEndpointRespostaPublica(tokenUrl),
             http_status: resp.status, erro: `Falha OAuth2 (HTTP ${resp.status})`,
             detalhes: raw, duracao_ms: dur,
             dica: gerarDicaOAuth(resp.status, undefined, raw),
-          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }, 200);
         }
-        return new Response(JSON.stringify({
-          ok: true, modo, oauth_endpoint: tokenUrl,
+        return jsonRes({
+          ok: true, modo, oauth_endpoint: oauthEndpointRespostaPublica(tokenUrl),
           duracao_ms: dur,
           expires_in: (raw as any)?.expires_in ?? null,
           token_type: (raw as any)?.token_type ?? null,
           mensagem: "Credenciais válidas. Você já pode salvá-las nos secrets.",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }, 200);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        return new Response(JSON.stringify({
-          ok: false, modo, oauth_endpoint: tokenUrl,
+        return jsonRes({
+          ok: false, modo, oauth_endpoint: oauthEndpointRespostaPublica(tokenUrl),
           erro: msg.includes("aborted") ? "Timeout (15s) ao conectar no provedor OAuth2" : msg,
           dica: gerarDicaOAuth(0, msg),
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }, 200);
       }
     }
 
     // Modo PING: valida apenas a autenticação contra o provedor.
     if (body.ping) {
-      const url = Deno.env.get("ANALISE_ELEITORAL_API_URL");
-      const user = Deno.env.get("ANALISE_ELEITORAL_API_USER");
-      const pass = Deno.env.get("ANALISE_ELEITORAL_API_PASSWORD");
+      const creds = await lerCredenciaisProvedor();
+      const user = creds.user;
+      const pass = creds.pass;
       const modo = "oauth2_client_credentials";
-      if (!url) {
-        return new Response(JSON.stringify({
-          ok: false, modo, erro: "ANALISE_ELEITORAL_API_URL não configurada",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
       if (!user || !pass) {
-        return new Response(JSON.stringify({
+        return jsonRes({
           ok: false, modo,
-          erro: "Faltam ANALISE_ELEITORAL_API_USER (client_id) e/ou ANALISE_ELEITORAL_API_PASSWORD (client_secret)",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          erro:
+            "Faltam credenciais OAuth2: defina ANALISE_ELEITORAL_API_USER + ANALISE_ELEITORAL_API_PASSWORD nos secrets da função, ou salve Client ID/Secret (super admin). URL é opcional.",
+        }, 200);
       }
       const started = Date.now();
       // Reseta cache para validar credenciais "ao vivo".
       cachedToken = null;
       const tok = await obterTokenProvedor();
       const dur = Date.now() - started;
+      const oauthPathOnly = ultimoOauthEndpoint ? oauthEndpointRespostaPublica(ultimoOauthEndpoint) : null;
       if (!tok.ok) {
-        return new Response(JSON.stringify({
-          ok: false, modo, provedor: new URL(url).host,
-          oauth_endpoint: ultimoOauthEndpoint,
+        return jsonRes({
+          ok: false, modo, provedor: ROTULO_PROVEDOR_ENRIQUECIMENTO,
+          oauth_endpoint: oauthPathOnly,
           http_status: tok.http_status, erro: tok.erro,
           detalhes: (tok as any).raw ?? null,
           duracao_ms: dur,
           dica: gerarDicaOAuth(tok.http_status, tok.erro, (tok as any).raw)
-            ?? "Confira se ANALISE_ELEITORAL_API_URL aponta para a raiz da API do SA Connect Data e se USER/PASSWORD são o client_id/client_secret OAuth2.",
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            ?? "Confira client_id/client_secret (tabela assertiva ou secrets). ANALISE_ELEITORAL_API_URL é opcional.",
+        }, 200);
       }
-      return new Response(JSON.stringify({
-        ok: true, modo, provedor: new URL(url).host,
-        oauth_endpoint: ultimoOauthEndpoint,
+      return jsonRes({
+        ok: true, modo, provedor: ROTULO_PROVEDOR_ENRIQUECIMENTO,
+        oauth_endpoint: oauthPathOnly,
         duracao_ms: dur,
         token_cache: tok.cached ? "reaproveitado" : "novo",
         mensagem: "Token OAuth2 obtido com sucesso. Conexão com SA Connect Data funcionando.",
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }, 200);
     }
 
     let eleitor: any = null;
     if (body.eleitor_id) {
-      const { data } = await supabase
+      const { data, error: eleitorErr } = await supabase
         .from("eleitores")
         .select("id, cpf, telefone, telefone_original, nome, data_nascimento, nome_mae, company_id")
         .eq("id", body.eleitor_id).maybeSingle();
+      if (eleitorErr) {
+        console.warn("[enriquecimento] erro ao buscar eleitor:", eleitorErr.message);
+        return jsonRes({ error: `Não foi possível acessar o cadastro do eleitor: ${eleitorErr.message}` }, 422);
+      }
+      if (!data) {
+        return jsonRes({
+          error: "Eleitor não encontrado ou sem permissão de acesso. Verifique as permissões de RLS.",
+          eleitor_id: body.eleitor_id,
+        }, 404);
+      }
       eleitor = data;
     }
 
@@ -576,15 +641,12 @@ Deno.serve(async (req: Request) => {
         : null;
 
     if (!lookupPayload) {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          skipped: true,
-          motivo: "Sem CPF e sem telefone para enriquecer",
-          eleitor_id: body.eleitor_id ?? null,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return jsonRes({
+        ok: true,
+        skipped: true,
+        motivo: "Eleitor sem CPF e sem telefone — adicione ao menos um desses dados para poder enriquecer.",
+        eleitor_id: body.eleitor_id ?? null,
+      }, 200);
     }
 
     const chave_busca = cpf ? "cpf" : "telefone";
@@ -607,11 +669,11 @@ Deno.serve(async (req: Request) => {
           acao: "enriquecimento.bloqueado_limite",
           detalhes: { motivo, uso },
         });
-        return new Response(JSON.stringify({
+        return jsonRes({
           error: motivo,
           bloqueado: true,
           uso,
-        }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }, 200);
       }
     }
 
@@ -715,16 +777,15 @@ Deno.serve(async (req: Request) => {
         acao: "enriquecimento.erro",
         detalhes: { erro: call.erro, http_status: call.http_status, chave_busca },
       });
-      return new Response(JSON.stringify({
+      const pub = metaProvedorRespostaCliente(call.provedor, ultimoOauthEndpoint);
+      return jsonRes({
         error: call.erro ?? "Falha na consulta",
         details: call.raw,
         http_status: call.http_status,
-        oauth_endpoint: ultimoOauthEndpoint,
-        provedor: call.provedor,
+        oauth_endpoint: pub.oauth_endpoint,
+        provedor: pub.provedor,
         dica: gerarDicaOAuth(call.http_status, call.erro, call.raw),
-      }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      }, 502);
     }
 
     // 3) Atualiza eleitor APENAS com campos permitidos e somente quando estiverem vazios
@@ -768,10 +829,22 @@ Deno.serve(async (req: Request) => {
       const nomeApiPresente = !!nomeApiNorm;
       const primeiroNomeBate =
         !nomeApiPresente ||
+        !primeiroBase || // cadastro sem nome: não bloqueia
         (!!primeiroBase && !!primeiroApi && primeiroBase === primeiroApi);
 
-      const bloquearAtualizacao =
-        divergencia.divergencias_fortes.length > 0 || !primeiroNomeBate;
+      // Divergência "forte" de nome só bloqueia se AMBOS os nomes existem no cadastro
+      // e na API e o primeiro nome é claramente diferente (ex.: nomes de pessoas distintas).
+      // Quando o cadastro não tem nome ou tem apenas apelido, ainda aplicamos outros campos.
+      const nomeBloqueia = !primeiroNomeBate && !!primeiroBase && !!primeiroApi;
+
+      // CPF divergente é o único critério que bloqueia tudo (garante que não misturamos dados de pessoas distintas).
+      const cpfDiverge = divergencia.divergencias_fortes.includes("cpf");
+
+      // Bloqueio total: CPF de pessoas diferentes confirmado
+      const bloquearAtualizacaoTotal = cpfDiverge;
+
+      // Bloqueio parcial de nome: não actualizar nome mas ainda actualizar endereço/outros
+      const bloquearNome = nomeBloqueia;
 
       const patch: Record<string, any> = {};
       const setIf = (k: string, v: any, currentKey?: string) => {
@@ -783,25 +856,32 @@ Deno.serve(async (req: Request) => {
         }
       };
 
-      if (!bloquearAtualizacao) {
+      if (!bloquearAtualizacaoTotal) {
         if (!eleitor.cpf && r.cpf) { patch.cpf = onlyDigits(r.cpf); camposAplicados.push("cpf"); }
-        // Substitui nome curto (só primeiro nome) pelo nome completo da API
-        // quando o primeiro nome bate.
-        if (
-          r.nome_completo &&
-          primeiroBase &&
-          primeiroApi &&
-          primeiroBase === primeiroApi &&
-          nomeBaseNorm.split(" ").length < 2 &&
-          String(r.nome_completo).trim().split(/\s+/).length >= 2
-        ) {
-          patch.nome = String(r.nome_completo).trim();
-          camposAplicados.push("nome");
-        } else {
-          setIf("nome", r.nome_completo);
+
+        if (!bloquearNome) {
+          // Substitui nome curto (só primeiro nome) pelo nome completo da API quando o primeiro nome bate.
+          if (
+            r.nome_completo &&
+            primeiroBase &&
+            primeiroApi &&
+            primeiroBase === primeiroApi &&
+            nomeBaseNorm.split(" ").length < 2 &&
+            String(r.nome_completo).trim().split(/\s+/).length >= 2
+          ) {
+            patch.nome = String(r.nome_completo).trim();
+            camposAplicados.push("nome");
+          } else if (!primeiroBase) {
+            // Cadastro sem nome: preenche com o da API
+            setIf("nome", r.nome_completo);
+          } else {
+            setIf("nome", r.nome_completo);
+          }
+          setIf("data_nascimento", r.data_nascimento);
+          setIf("nome_mae", r.nome_mae);
         }
-        setIf("data_nascimento", r.data_nascimento);
-        setIf("nome_mae", r.nome_mae);
+
+        // Campos independentes do nome — sempre enriquecidos se vazios
         setIf("email", r.email);
         setIf("titulo_eleitoral", r.titulo_eleitoral);
         setIf("municipio_eleitoral", r.municipio_eleitoral);
@@ -820,12 +900,14 @@ Deno.serve(async (req: Request) => {
 
       patch.data_ultima_consulta = new Date().toISOString();
       patch.score_confianca = divergencia.score;
-      if (bloquearAtualizacao) {
+      // Guarda sempre o nome retornado pelo provedor para comparação — sem sobrescrever o nome manual.
+      if (r.nome_completo) patch.nome_api = String(r.nome_completo).trim();
+      if (bloquearAtualizacaoTotal) {
         patch.status_validacao_eleitoral = "pendente revisão";
-        patch.motivo_divergencia =
-          !primeiroNomeBate
-            ? `Primeiro nome diverge: cadastro="${eleitor.nome ?? ""}" vs SA Connect Data="${r.nome_completo ?? ""}"`
-            : divergencia.motivo;
+        patch.motivo_divergencia = divergencia.motivo ?? "CPF divergente — possível cadastro de pessoa diferente";
+      } else if (bloquearNome) {
+        patch.status_validacao_eleitoral = "pendente revisão";
+        patch.motivo_divergencia = `Nome diverge: cadastro="${eleitor.nome ?? ""}" vs SA Connect Data="${r.nome_completo ?? ""}" — outros campos foram preenchidos`;
       } else if (divergencia.status_sugerido === "validado" && eleitor.cpf) {
         patch.status_validacao_eleitoral = "validado";
         patch.motivo_divergencia = null;
@@ -839,20 +921,23 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      const acaoLog = bloquearAtualizacaoTotal
+        ? "enriquecimento.divergencia_forte"
+        : bloquearNome
+          ? "enriquecimento.nome_divergente_parcial"
+          : "enriquecimento.aplicado";
+
       await supabase.from("analise_logs").insert({
         user_id: uid(),
         eleitor_id: body.eleitor_id,
-        acao: bloquearAtualizacao
-          ? (!primeiroNomeBate
-              ? "enriquecimento.primeiro_nome_divergente"
-              : "enriquecimento.divergencia_forte")
-          : "enriquecimento.aplicado",
+        acao: acaoLog,
         detalhes: {
           campos: camposAplicados,
           chave_busca,
           provedor: call.provedor,
           divergencia,
           primeiro_nome_bate: primeiroNomeBate,
+          bloqueio: bloquearAtualizacaoTotal ? "total" : bloquearNome ? "nome" : "nenhum",
         },
       });
     }
@@ -860,21 +945,18 @@ Deno.serve(async (req: Request) => {
     // Não devolve o telefone_api_log para o cliente
     const { _telefone_api_log: _omit, ...safeResult } = call.result;
 
-    return new Response(JSON.stringify({
+    const pubOk = metaProvedorRespostaCliente(call.provedor, ultimoOauthEndpoint);
+    return jsonRes({
       success: true,
       chave_busca,
-      oauth_endpoint: ultimoOauthEndpoint,
-      provedor: call.provedor,
+      oauth_endpoint: pubOk.oauth_endpoint,
+      provedor: pubOk.provedor,
       campos_aplicados: camposAplicados,
       divergencia,
       dados: safeResult,
-    }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro desconhecido";
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonRes({ error: msg }, 500);
   }
 });

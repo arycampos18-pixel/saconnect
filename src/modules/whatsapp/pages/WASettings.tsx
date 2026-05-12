@@ -8,9 +8,11 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { Loader2, User, Eye, PhoneOff, ShieldCheck, CheckCircle2, XCircle, Lock, Ban } from "lucide-react";
+import { Loader2, User, Eye, PhoneOff, ShieldCheck, CheckCircle2, XCircle, Lock, Ban, Webhook } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { zapiInstanceService } from "../services/zapiInstanceService";
+
+const WEBHOOK_RECEPTIVO_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/webhook-zapi-receptivo`;
 
 export default function WASettings() {
   // Perfil
@@ -37,6 +39,10 @@ export default function WASettings() {
   // Contatos bloqueados
   const [blockedContacts, setBlockedContacts] = useState<string[]>([]);
   const [loadingBlocked, setLoadingBlocked] = useState(false);
+
+  // Webhook
+  const [configuringWebhook, setConfiguringWebhook] = useState(false);
+  const [webhookOk, setWebhookOk] = useState<boolean | null>(null);
 
   useEffect(() => {
     zapiInstanceService.getProfile().then((p: any) => {
@@ -118,8 +124,64 @@ export default function WASettings() {
     }
   };
 
+  const configurarWebhook = async () => {
+    setConfiguringWebhook(true);
+    setWebhookOk(null);
+    try {
+      await zapiInstanceService.updateWebhookReceived(WEBHOOK_RECEPTIVO_URL);
+      await zapiInstanceService.updateWebhookSend(true);
+      setWebhookOk(true);
+      toast.success("Webhook configurado! O Z-API agora enviará mensagens recebidas para o SA Connect.");
+    } catch (e: any) {
+      setWebhookOk(false);
+      toast.error("Falha ao configurar webhook: " + (e?.message ?? "Erro desconhecido"));
+    } finally {
+      setConfiguringWebhook(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* ─── Card de Webhook ─── */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-primary" />
+            Recebimento de Mensagens (Webhook)
+          </CardTitle>
+          <CardDescription>
+            Para receber mensagens em tempo real, o Z-API precisa enviar os eventos para o SA Connect.
+            Clique no botão abaixo para configurar automaticamente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="text-xs font-mono bg-muted rounded px-3 py-2 break-all select-all">
+            {WEBHOOK_RECEPTIVO_URL}
+          </div>
+          <div className="flex items-center gap-3">
+            <Button onClick={configurarWebhook} disabled={configuringWebhook} className="gap-2">
+              {configuringWebhook
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Webhook className="h-4 w-4" />}
+              Configurar webhook agora
+            </Button>
+            {webhookOk === true && (
+              <span className="flex items-center gap-1 text-sm text-emerald-600 font-medium">
+                <CheckCircle2 className="h-4 w-4" /> Webhook activo
+              </span>
+            )}
+            {webhookOk === false && (
+              <span className="flex items-center gap-1 text-sm text-destructive font-medium">
+                <XCircle className="h-4 w-4" /> Falhou — verifique a conexão Z-API
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Se já configurou manualmente no painel Z-API, apenas certifique-se de que a URL acima está correcta.
+          </p>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Centro de Controle da Instância</CardTitle>

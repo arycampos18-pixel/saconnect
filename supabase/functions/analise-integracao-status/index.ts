@@ -37,40 +37,48 @@ const isCredentialsError = (body: unknown) => {
     || /token inválido|token invalido|unauthorized|forbidden/i.test(message);
 };
 
+/** Lê o token DirectD: DB (analise_provedor_credenciais, provedor='directd') → env. */
+async function lerTokenDirectD(): Promise<string | null> {
+  try {
+    const srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const sUrl = Deno.env.get("SUPABASE_URL");
+    if (srk && sUrl) {
+      const admin = createClient(sUrl, srk);
+      const { data } = await admin
+        .from("analise_provedor_credenciais")
+        .select("client_id")
+        .eq("provedor", "directd")
+        .maybeSingle();
+      if (data?.client_id) return data.client_id as string;
+    }
+  } catch { /* ignora */ }
+  return Deno.env.get("DIRECTD_TOKEN") ?? Deno.env.get("INFOSIMPLES_TOKEN") ?? null;
+}
+
 async function statusInfosimples(): Promise<ProviderStatus> {
-  const token = Deno.env.get("INFOSIMPLES_TOKEN");
+  const token = await lerTokenDirectD();
   const base: ProviderStatus = {
     id: "infosimples",
-    nome: "Infosimples · TSE Título de Eleitor",
+    nome: "DirectD · TSE Título e Local de Votação",
     categoria: "Análise Eleitoral",
     configurado: !!token,
     conectado: false,
-    detalhe: "Token não configurado",
+    detalhe: token ? "Token configurado — verificando conexão…" : "Token não configurado",
     testado_em: now(),
   };
   if (!token) return base;
   try {
-    // Endpoint leve de verificação — ajusta-se ao retorno real da Infosimples.
-    const resp = await fetch("https://api.infosimples.com/api/v2/account/balance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    const code = (data as any)?.code ?? resp.status;
-    if (resp.ok && (code === 200 || code === 600)) {
-      const saldo = (data as any)?.data?.[0]?.saldo ?? (data as any)?.saldo;
-      return {
-        ...base,
-        conectado: true,
-        detalhe: saldo !== undefined ? `Conectado · saldo: ${saldo}` : "Conectado",
-      };
+    // Teste leve: consulta com CPF inválido — qualquer resposta não-401/403 indica token válido
+    const url = new URL("https://apiv3.directd.com.br/api/TituloLocalVotacao");
+    url.searchParams.set("TOKEN", token);
+    url.searchParams.set("CPF", "00000000000");
+    url.searchParams.set("DATANASCIMENTO", "01/01/2000");
+    url.searchParams.set("NOMEMAE", "TESTE");
+    const resp = await fetch(url.toString());
+    if (resp.status === 401 || resp.status === 403) {
+      return { ...base, conectado: false, detalhe: "Token inválido ou sem permissão (HTTP " + resp.status + ")" };
     }
-    return {
-      ...base,
-      conectado: false,
-      detalhe: `Token inválido ou sem permissão (código ${code})`,
-    };
+    return { ...base, conectado: true, detalhe: "Token activo · API DirectD acessível" };
   } catch (e) {
     return {
       ...base,
@@ -80,20 +88,60 @@ async function statusInfosimples(): Promise<ProviderStatus> {
   }
 }
 
+/** Mesma ordem e tabela que `lerCredenciaisProvedor` em analise-enriquecimento (DB → env). */
+async function oauthEnriquecimentoResolvido(): Promise<{ ok: boolean }> {
+  try {
+    const srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const sUrl = Deno.env.get("SUPABASE_URL");
+    if (srk && sUrl) {
+      const admin = createClient(sUrl, srk);
+      const { data } = await admin
+        .from("analise_provedor_credenciais")
+        .select("client_id, client_secret")
+        .eq("provedor", "assertiva")
+        .maybeSingle();
+      if (data?.client_id && data?.client_secret) return { ok: true };
+    }
+  } catch {
+    /* ignore */
+  }
+  const u = Deno.env.get("ANALISE_ELEITORAL_API_USER");
+  const p = Deno.env.get("ANALISE_ELEITORAL_API_PASSWORD");
+  return { ok: !!(u && p) };
+}
+
 async function statusEnriquecimento(): Promise<ProviderStatus> {
-  const key = Deno.env.get("ANALISE_ELEITORAL_API_KEY");
-  const url = Deno.env.get("ANALISE_ELEITORAL_API_URL");
+  const keyRaw = Deno.env.get("ANALISE_ELEITORAL_API_KEY");
+  const key = keyRaw?.trim() ?? "";
+  const url = Deno.env.get("ANALISE_ELEITORAL_API_URL")?.trim() ?? "";
+
+  const oauth = await oauthEnriquecimentoResolvido();
+  const oauthOk = oauth.ok;
+  const configurado = !!(key || oauthOk);
+  const urlOk = url.length > 0;
+
+  let detalhe: string;
+  if (!configurado) {
+    detalhe =
+      "Sem credenciais: defina secrets ANALISE_ELEITORAL_API_USER + ANALISE_ELEITORAL_API_PASSWORD, ou ANALISE_ELEITORAL_API_KEY, ou salve Client ID/Secret como super admin (botão Salvar credenciais).";
+  } else if (key && !urlOk) {
+    detalhe = "API key definida (modo legado) — sem URL do provedor no secret ANALISE_ELEITORAL_API_URL.";
+  } else if (!key && oauthOk && !urlOk) {
+    detalhe =
+      "OAuth2 configurado — URL opcional; sem ANALISE_ELEITORAL_API_URL usa-se o endpoint padrão do SA Connect Data.";
+  } else {
+    detalhe = "Configurada e pronta.";
+  }
+
+  const conectado = (!!key && urlOk) || oauthOk;
+
   return {
     id: "enriquecimento",
     nome: "API de Enriquecimento Cadastral",
     categoria: "Análise Eleitoral",
-    configurado: !!key,
-    conectado: !!key && !!url,
-    detalhe: !key
-      ? "API key não configurada"
-      : !url
-        ? "Configurada (modo simulado — sem URL do provedor)"
-        : "Configurada e pronta",
+    configurado,
+    conectado,
+    detalhe,
     testado_em: now(),
   };
 }
@@ -225,25 +273,62 @@ async function statusGoogleTickets(): Promise<ProviderStatus> {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const authHeader = req.headers.get("Authorization");
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")?.trim();
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")?.trim();
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.error("[analise-integracao-status] SUPABASE_URL ou SUPABASE_ANON_KEY ausente no ambiente da função.");
+      return new Response(
+        JSON.stringify({
+          error:
+            "Função sem variáveis SUPABASE_URL / SUPABASE_ANON_KEY. No Supabase Dashboard → Edge Functions, confirme que o projeto injeta essas variáveis (automático nas funções hospedadas).",
+        }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const authHeader =
+      req.headers.get("Authorization")?.trim() ||
+      req.headers.get("authorization")?.trim() ||
+      "";
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const token = authHeader.replace(/^Bearer\s+/i, "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
+
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!jwt) {
+      return new Response(JSON.stringify({ error: "Token ausente no header Authorization" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claimsData.claims.sub as string;
+
+    // Decodifica o payload do JWT localmente (sem round-trip ao servidor Auth).
+    // Chamar /auth/v1/user falha quando a sessão foi expirada/removida da tabela auth.sessions
+    // mesmo que o token ainda seja criptograficamente válido.
+    // A segurança continua garantida: todas as queries usam o JWT via RLS.
+    const userId = (() => {
+      try {
+        // JWTs usam base64url (-/_); atob() só aceita base64 padrão (+//).
+        const part = (jwt.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+        const padded = part + "=".repeat((4 - part.length % 4) % 4);
+        const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+        const sub = payload.sub ?? payload.user_id;
+        return typeof sub === "string" && sub.length > 0 ? sub : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Token inválido ou sem campo sub." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
     const [info, enriq, zapi, meta, ai, twilio, google] = await Promise.all([
       statusInfosimples(),
@@ -255,22 +340,37 @@ Deno.serve(async (req: Request) => {
       statusGoogleTickets(),
     ]);
 
-    // contagem de consultas recentes por provedor (últimos 30 dias)
+    // contagem de consultas recentes por provedor (últimos 30 dias) — falha isolada não derruba a lista
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: rows } = await supabase
-      .from("analise_api_consultas")
-      .select("provedor")
-      .gte("created_at", since)
-      .limit(5000);
     const counts: Record<string, number> = {};
-    for (const r of rows ?? []) counts[(r as any).provedor] = (counts[(r as any).provedor] ?? 0) + 1;
+    try {
+      const { data: rows, error: rowsErr } = await supabase
+        .from("analise_api_consultas")
+        .select("provedor")
+        .gte("created_at", since)
+        .limit(5000);
+      if (rowsErr) {
+        console.warn("[analise-integracao-status] analise_api_consultas:", rowsErr.message);
+      } else {
+        for (const r of rows ?? []) counts[(r as any).provedor] = (counts[(r as any).provedor] ?? 0) + 1;
+      }
+    } catch (e) {
+      console.warn("[analise-integracao-status] contagem consultas:", e);
+    }
     info.ultimas_consultas =
       (counts["infosimples"] ?? 0) +
       (counts["api.infosimples.com"] ?? 0);
-    enriq.ultimas_consultas =
-      (counts["enriquecimento"] ?? 0) +
-      (counts["mock"] ?? 0) +
-      (counts["placeholder"] ?? 0);
+    enriq.ultimas_consultas = Object.entries(counts).reduce((sum, [k, n]) => {
+      const p = (k ?? "").toLowerCase();
+      if (
+        p === "mock" ||
+        p === "enriquecimento" ||
+        p === "placeholder" ||
+        p === "assertiva" ||
+        p.includes("assertivasolucoes")
+      ) return sum + (Number(n) || 0);
+      return sum;
+    }, 0);
 
     return new Response(JSON.stringify({
       providers: [info, enriq, zapi, meta, ai, twilio, google],
@@ -279,6 +379,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro desconhecido";
+    console.error("[analise-integracao-status] não tratado:", e);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

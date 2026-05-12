@@ -63,23 +63,36 @@ Deno.serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Decodifica o JWT localmente (evita round-trip ao servidor Auth que falha
+    // com "Session from session_id claim in JWT does not exist").
+    const _jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const userId = (() => {
+      try {
+        // JWTs usam base64url (-/_); atob() só aceita base64 padrão (+//).
+        const part = (_jwt.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+        const padded = part + "=".repeat((4 - part.length % 4) % 4);
+        const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+        const sub = payload.sub ?? payload.user_id;
+        return typeof sub === "string" && sub.length > 0 ? sub : null;
+      } catch { return null; }
+    })();
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Token inválido ou ausente." }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData.user) {
-      return new Response(JSON.stringify({ error: "Sessão inválida" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     // Resolve credenciais Z-API somente a partir da sessão default da empresa do usuário.
     let ZAPI_INSTANCE_ID = "";
     let ZAPI_INSTANCE_TOKEN = "";
     let ZAPI_CLIENT_TOKEN = "";
     try {
-      const { data: companyId } = await supabase.rpc("user_default_company", { _user_id: userData.user.id });
+      const { data: companyId } = await supabase.rpc("user_default_company", { _user_id: userId });
       if (companyId) {
         const { data: sess } = await supabase
           .from("whatsapp_sessions")

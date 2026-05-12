@@ -1,46 +1,8 @@
-project_id = "ktwdgnkurtalclsgxfov"
+project_id = "guuwqcfobiiteuzozgkl"
 
-[functions.backup-snapshot]
-verify_jwt = false
-
-[functions.webhook-zapi]
-verify_jwt = false
-
-[functions.aniversariantes-disparo]
-verify_jwt = false
-
+# Webhooks públicos do Z-API — sem JWT (o Z-API não envia token)
 [functions.webhook-zapi-receptivo]
 verify_jwt = false
 
-[functions.whatsapp-webhook]
-verify_jwt = false
-
-[functions.tickets-google-oauth-callback]
-verify_jwt = false
-
-[functions.whatsapp-meta-webhook]
-verify_jwt = false
-
-[functions.auto-cadastro-validar]
-verify_jwt = false
-
-[functions.auto-cadastro-submit]
-verify_jwt = false
-
-[functions.wa-bulk-webhook]
-verify_jwt = false
-
-[functions.wa-bulk-monitor]
-verify_jwt = false
-
-[functions.wa-bulk-worker]
-verify_jwt = false
-
-[functions.wa-bulk-submit-template]
-verify_jwt = false
-
-[functions.analise-enriquecimento]
-verify_jwt = false
-
-[functions.analise-job-worker]
+[functions.webhook-zapi]
 verify_jwt = false

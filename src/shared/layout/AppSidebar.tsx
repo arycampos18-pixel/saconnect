@@ -160,7 +160,6 @@ const main: Item[] = [
     title: "WhatsApp",
     url: "/app/whatsapp",
     icon: MessageCircle,
-    badgeKey: "wa",
     subFolders: [
       {
         title: "WhatsApp",

@@ -19,11 +19,6 @@ import { getRequiredPermission, findFallbackRoute } from "@/shared/auth/routePer
 import { ShieldOff } from "lucide-react";
 import { Can } from "@/shared/auth/Can";
 import { NovoEleitorMenu } from "@/modules/eleitores/components/NovoEleitorMenu";
-import { useIdleSession } from "@/shared/auth/useIdleSession";
-import { useSessionEnforcement } from "@/shared/auth/useSessionEnforcement";
-import { SessionTimer } from "@/shared/components/SessionTimer";
-import { authService } from "@/modules/auth/services/authService";
-import { clearSessionJti } from "@/shared/auth/sessionFingerprint";
 
 function initials(name?: string | null) {
   if (!name) return "SA";
@@ -41,27 +36,6 @@ export default function AppLayout() {
   const { user } = useAuth();
   const { currentCompany, isSuperAdmin, hasPermission, loading: companyLoading, switching, permissionsReady } = useCompany();
   useNovasMensagensRealtime();
-
-  // ---- Segurança: logout por inatividade + sessão única ----
-  const handleIdleExpire = () => {
-    authService.signOut().finally(() => {
-      clearSessionJti();
-      navigate("/login?reason=idle", { replace: true });
-    });
-  };
-  const { remainingMs } = useIdleSession({ enabled: !!user, onExpire: handleIdleExpire });
-
-  useSessionEnforcement({
-    enabled: !!user,
-    userId: user?.id,
-    onRevoked: (reason) => {
-      authService.signOut().finally(() => {
-        clearSessionJti();
-        const r = reason === "replaced" ? "replaced" : "revoked";
-        navigate(`/login?reason=${r}`, { replace: true });
-      });
-    },
-  });
 
   // Em telas menores (< xl = 1280px) a sidebar inicia colapsada para não
   // empurrar nem espremer o conteúdo. No mobile (< 768px) o shadcn
@@ -141,7 +115,6 @@ export default function AppLayout() {
                 <div className="hidden sm:inline-flex">
                   <ThemeToggle />
                 </div>
-                <SessionTimer remainingMs={remainingMs} />
                 <Avatar className="h-9 w-9 border border-border bg-card shadow-elegant-sm">
                   <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
                     {initials(userName)}

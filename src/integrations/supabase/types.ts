@@ -816,45 +816,6 @@ export type Database = {
           },
         ]
       }
-      auth_app_sessions: {
-        Row: {
-          created_at: string
-          device_label: string | null
-          id: string
-          ip: string | null
-          last_seen_at: string
-          revoked_at: string | null
-          revoked_reason: string | null
-          session_jti: string
-          user_agent: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          device_label?: string | null
-          id?: string
-          ip?: string | null
-          last_seen_at?: string
-          revoked_at?: string | null
-          revoked_reason?: string | null
-          session_jti: string
-          user_agent?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          device_label?: string | null
-          id?: string
-          ip?: string | null
-          last_seen_at?: string
-          revoked_at?: string | null
-          revoked_reason?: string | null
-          session_jti?: string
-          user_agent?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       automacao_execucoes: {
         Row: {
           acoes_executadas: Json
@@ -4280,39 +4241,6 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
           updated_by?: string | null
-        }
-        Relationships: []
-      }
-      security_events: {
-        Row: {
-          company_id: string | null
-          created_at: string
-          detalhes: Json
-          event_type: string
-          id: string
-          ip: string | null
-          user_agent: string | null
-          user_id: string | null
-        }
-        Insert: {
-          company_id?: string | null
-          created_at?: string
-          detalhes?: Json
-          event_type: string
-          id?: string
-          ip?: string | null
-          user_agent?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          company_id?: string | null
-          created_at?: string
-          detalhes?: Json
-          event_type?: string
-          id?: string
-          ip?: string | null
-          user_agent?: string | null
-          user_id?: string | null
         }
         Relationships: []
       }

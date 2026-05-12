@@ -41,6 +41,9 @@ export function ConversaPainel({ conversaId }: Props) {
   const { data: mensagens = [] } = useQuery({
     queryKey: ["mensagens", conversaId],
     queryFn: () => atendimentoService.listarMensagens(conversaId),
+    // Polling de segurança: garante mensagens recebidas mesmo sem realtime
+    refetchInterval: 4000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: departamentos = [] } = useQuery({
@@ -74,6 +77,7 @@ export function ConversaPainel({ conversaId }: Props) {
     });
   }, [conversaId, qc]);
 
+  // Realtime: mensagem nova → invalida cache imediatamente (sem esperar o polling)
   useEffect(() => {
     if (!conversaId) return;
     const channel = supabase
@@ -84,6 +88,13 @@ export function ConversaPainel({ conversaId }: Props) {
       }, () => {
         qc.invalidateQueries({ queryKey: ["mensagens", conversaId] });
         qc.invalidateQueries({ queryKey: ["conversas"] });
+        qc.invalidateQueries({ queryKey: ["conversa", conversaId] });
+      })
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "whatsapp_mensagens",
+        filter: `conversa_id=eq.${conversaId}`,
+      }, () => {
+        qc.invalidateQueries({ queryKey: ["mensagens", conversaId] });
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
