@@ -178,7 +178,7 @@ export function AssertivaBuscaDialog({
 
         return {
           ok: true,
-          dados: d,
+          dados: { ...d, _raw_debug: data?._raw_debug },
           campos_aplicados: camposAplicados,
         } as BuscaResultado;
       }
@@ -346,13 +346,13 @@ export function AssertivaBuscaDialog({
               </div>
             )}
 
-            {/* Detalhes do erro da API */}
-            {!resultado.ok && resultado.dados && (
+            {/* Detalhes do erro ou resposta bruta para diagnóstico */}
+            {(!resultado.ok || (resultado.ok && (resultado.campos_aplicados?.length ?? 0) === 0)) && resultado.dados && (
               <details className="mt-2 text-xs">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
-                  Ver detalhe do erro
+                  {resultado.ok ? "Ver resposta bruta da API (diagnóstico)" : "Ver detalhe do erro"}
                 </summary>
-                <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted/40 p-2 whitespace-pre-wrap">
+                <pre className="mt-1 max-h-52 overflow-auto rounded bg-muted/40 p-2 whitespace-pre-wrap">
                   {JSON.stringify(resultado.dados, null, 2)}
                 </pre>
               </details>

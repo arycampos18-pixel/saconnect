@@ -1048,6 +1048,8 @@ Deno.serve(async (req: Request) => {
       campos_aplicados: camposAplicados,
       divergencia,
       dados: safeResult,
+      // Inclui raw para diagnóstico do mapeamento de campos
+      _raw_debug: call.raw,
     }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro desconhecido";
