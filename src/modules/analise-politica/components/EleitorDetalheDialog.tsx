@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Search, CreditCard, Phone } from "lucide-react";
 import { EleitorEditDialog } from "./EleitorEditDialog";
+import { AssertivaBuscaDialog } from "./AssertivaBuscaDialog";
 
 function Row({ label, value }: { label: string; value: any }) {
   return (
@@ -25,6 +26,7 @@ export function EleitorDetalheDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [buscando, setBuscando] = useState(false);
   if (!eleitor) return null;
   const e = eleitor;
   const fmtData = (d?: string | null) =>
@@ -38,6 +40,14 @@ export function EleitorDetalheDialog({
         </DialogHeader>
         <ScrollArea className="max-h-[70vh] pr-4">
           <div className="space-y-4">
+            {/* Botões de busca SA Connect Data */}
+            <div className="flex flex-wrap gap-2 pb-2 border-b border-border/50">
+              <Button size="sm" variant="outline" onClick={() => setBuscando(true)}>
+                <Search className="h-4 w-4 mr-1.5" />
+                Buscar dados (CPF / Telefone)
+              </Button>
+            </div>
+
             <section>
               <h4 className="text-sm font-semibold mb-2">Identificação</h4>
               <Row label="Nome" value={e.nome} />
@@ -45,6 +55,10 @@ export function EleitorDetalheDialog({
               <Row label="Data de Nascimento" value={fmtData(e.data_nascimento)} />
               <Row label="Nome da mãe" value={e.nome_mae} />
               <Row label="E-mail" value={e.email} />
+              <Row label="Gênero" value={e.genero} />
+              <Row label="Estado civil" value={e.estado_civil} />
+              <Row label="Nacionalidade" value={e.nacionalidade} />
+              <Row label="Profissão" value={e.profissao} />
             </section>
 
             <section>
@@ -61,6 +75,43 @@ export function EleitorDetalheDialog({
                 }
               />
             </section>
+
+            {/* Telefones da API */}
+            {Array.isArray(e.telefones_api) && e.telefones_api.length > 0 && (
+              <section>
+                <h4 className="text-sm font-semibold mb-2">Telefones (SA Connect Data)</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {e.telefones_api.map((t: any, i: number) => (
+                    <Badge key={i} variant="outline" className="font-mono text-xs">
+                      {t.numero}
+                      {t.tipo ? <span className="ml-1 text-muted-foreground">· {t.tipo}</span> : null}
+                      {t.operadora ? <span className="ml-1 text-muted-foreground">· {t.operadora}</span> : null}
+                    </Badge>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Endereços da API */}
+            {Array.isArray(e.enderecos_api) && e.enderecos_api.length > 0 && (
+              <section>
+                <h4 className="text-sm font-semibold mb-2">Endereços (SA Connect Data)</h4>
+                <div className="space-y-1.5">
+                  {e.enderecos_api.map((en: any, i: number) => (
+                    <div key={i} className="rounded-md bg-muted/30 px-3 py-1.5 text-sm flex items-start gap-2">
+                      <div className="flex-1">
+                        {[en.logradouro, en.numero, en.complemento, en.bairro, en.cidade, en.estado, en.cep]
+                          .filter(Boolean).join(", ")}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        {en.tipo && <Badge variant="secondary" className="text-[10px]">{en.tipo}</Badge>}
+                        {en.principal && <Badge className="text-[10px] bg-primary">Principal</Badge>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section>
               <h4 className="text-sm font-semibold mb-2">Endereço</h4>
@@ -121,6 +172,14 @@ export function EleitorDetalheDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AssertivaBuscaDialog
+      eleitorId={e.id}
+      eleitorNome={e.nome}
+      open={buscando}
+      onOpenChange={setBuscando}
+      onSuccess={() => {}}
+    />
 
     <EleitorEditDialog
       eleitor={e}

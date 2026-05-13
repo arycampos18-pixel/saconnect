@@ -114,9 +114,9 @@ function ocultarAssertivaEmTextoUi(s: string): string {
 const docs: Record<string, { url: string; secret: string; comoObter: string }> = {
   infosimples: {
     url: "",
-    secret: "DIRECTD_TOKEN (ou configurado pelo botão Conectar)",
+    secret: "DIRECTD_TOKEN (ou configurado pelo bot˜o Conectar)",
     comoObter:
-      "No painel da integração ? histórico de consultas ? URL da consulta ? copie o valor do parâmetro TOKEN. Cole abaixo e clique em Salvar token.",
+      "No painel da integra˜˜o ? hist˜rico de consultas ? URL da consulta ? copie o valor do par˜metro TOKEN. Cole abaixo e clique em Salvar token.",
   },
   enriquecimento: {
     url: "",
@@ -186,6 +186,7 @@ export function IntegracoesPanel() {
   const [credValidateOpen, setCredValidateOpen] = useState(false);
   const [credClientId, setCredClientId] = useState("");
   const [credClientSecret, setCredClientSecret] = useState("");
+  const [credFinalidade, setCredFinalidade] = useState<number>(1);
   const [credLoading, setCredLoading] = useState(false);
   const [credResult, setCredResult] = useState<any>(null);
   const [credSaving, setCredSaving] = useState(false);
@@ -1659,6 +1660,24 @@ export function IntegracoesPanel() {
                 disabled={credLoading}
               />
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="cred-finalidade">Finalidade LGPD</Label>
+              <select
+                id="cred-finalidade"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                value={credFinalidade}
+                onChange={(e) => setCredFinalidade(Number(e.target.value))}
+                disabled={credLoading}
+              >
+                <option value={1}>1 ˜ Confirma??o de Identidade</option>
+                <option value={2}>2 ˜ Ciclo de Cr?dito</option>
+                <option value={4}>4 ˜ Execu??o de Contrato</option>
+                <option value={5}>5 ˜ Leg?timo Interesse</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Exigido pela LGPD em todas as consultas ? API.
+              </p>
+            </div>
             <Button
               className="w-full"
               disabled={credLoading || !credClientId.trim() || !credClientSecret.trim()}
@@ -1762,6 +1781,7 @@ export function IntegracoesPanel() {
                               save_credentials: true,
                               client_id: credClientId.trim(),
                               client_secret: credClientSecret.trim(),
+                              id_finalidade: credFinalidade,
                             },
                           },
                         );

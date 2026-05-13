@@ -7,24 +7,41 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Campos permitidos pela política do módulo. Telefone NUNCA entra aqui.
+// Campos permitidos pela política do módulo. Telefone NUNCA sobrescreve telefone_original.
+type TelefoneApi = {
+  numero: string;
+  tipo?: string | null;
+  operadora?: string | null;
+  ativo?: boolean | null;
+};
+
+type EnderecoApi = {
+  logradouro?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  cep?: string | null;
+  tipo?: string | null;
+  principal?: boolean | null;
+};
+
 type EnrichResult = {
   cpf?: string | null;
   nome_completo?: string | null;
   data_nascimento?: string | null;
-  endereco?: {
-    logradouro?: string | null;
-    numero?: string | null;
-    complemento?: string | null;
-    bairro?: string | null;
-    cidade?: string | null;
-    uf?: string | null;
-    cep?: string | null;
-  } | null;
   nome_mae?: string | null;
   email?: string | null;
+  genero?: string | null;
+  estado_civil?: string | null;
+  nacionalidade?: string | null;
+  profissao?: string | null;
   titulo_eleitoral?: string | null;
   municipio_eleitoral?: string | null;
+  endereco?: EnderecoApi | null;
+  telefones_api?: TelefoneApi[];
+  enderecos_api?: EnderecoApi[];
   // Telefone NÃO é exposto ao app — vai apenas para log técnico.
   _telefone_api_log?: string | null;
 };
@@ -58,9 +75,14 @@ function toIsoDate(v?: string | null): string | null {
 let cachedToken: { value: string; expira_em: number } | null = null;
 let ultimoOauthEndpoint: string | null = null;
 
-// Lê credenciais da tabela `analise_provedor_credenciais` (override),
-// caindo pros secrets do servidor caso a tabela esteja vazia.
-async function lerCredenciaisProvedor(): Promise<{ user: string | null; pass: string | null; origem: "db" | "env" | "missing" }> {
+// Lê credenciais (e id_finalidade) da tabela `analise_provedor_credenciais`,
+// caindo para os secrets do servidor quando a tabela não tiver registro.
+async function lerCredenciaisProvedor(): Promise<{
+  user: string | null;
+  pass: string | null;
+  id_finalidade: number;
+  origem: "db" | "env" | "missing";
+}> {
   try {
     const url = Deno.env.get("SUPABASE_URL");
     const srk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -68,11 +90,16 @@ async function lerCredenciaisProvedor(): Promise<{ user: string | null; pass: st
       const admin = createClient(url, srk);
       const { data } = await admin
         .from("analise_provedor_credenciais")
-        .select("client_id, client_secret")
+        .select("client_id, client_secret, id_finalidade")
         .eq("provedor", "assertiva")
         .maybeSingle();
       if (data?.client_id && data?.client_secret) {
-        return { user: data.client_id, pass: data.client_secret, origem: "db" };
+        return {
+          user: data.client_id,
+          pass: data.client_secret,
+          id_finalidade: Number(data.id_finalidade ?? 1),
+          origem: "db",
+        };
       }
     }
   } catch (_) { /* fallback para env */ }
@@ -80,6 +107,7 @@ async function lerCredenciaisProvedor(): Promise<{ user: string | null; pass: st
   const envPass = Deno.env.get("ANALISE_ELEITORAL_API_PASSWORD") ?? null;
   return {
     user: envUser, pass: envPass,
+    id_finalidade: 1,
     origem: envUser && envPass ? "env" : "missing",
   };
 }
@@ -158,15 +186,17 @@ function jsonRes(data: unknown, status = 200) {
 }
 
 function resolveProvedorApiHost(base?: string | null): string {
-  if (!base) return "api.assertivasolucoes.com.br";
+  // A URL correta conforme documentação oficial é integracao.assertivasolucoes.com.br
+  if (!base) return "integracao.assertivasolucoes.com.br";
   try {
     const url = new URL(base.replace(/\/+$/, ""));
-    if (url.host.includes("integracao.assertivasolucoes") || url.pathname.includes("/v3/doc")) {
-      return "api.assertivasolucoes.com.br";
+    // Se o usuário configurou a URL de documentação, corrige para produção
+    if (url.pathname.includes("/v3/doc")) {
+      return "integracao.assertivasolucoes.com.br";
     }
     return url.host;
   } catch {
-    return "api.assertivasolucoes.com.br";
+    return "integracao.assertivasolucoes.com.br";
   }
 }
 
@@ -234,7 +264,7 @@ async function obterTokenProvedor(): Promise<
   }
 }
 
-async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Promise<{
+async function chamarProvedor(payload: { cpf?: string; telefone?: string; idFinalidade?: number }): Promise<{
   ok: boolean;
   billable: boolean;
   http_status: number;
@@ -279,15 +309,16 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
       };
     }
     // 2) Endpoints SA Connect Data Localize v3.
-    const v3 = `https://${host}/localize/v3`;
+    const finalidade = payload.idFinalidade ?? 1;
+    const v3 = `https://${host}/v3/localize/v3`;
     const fullUrl = payload.cpf
-      ? `${v3}/cpf?cpf=${encodeURIComponent(payload.cpf)}&idFinalidade=1`
-      : `${v3}/telefone?telefone=${encodeURIComponent(payload.telefone ?? "")}&idFinalidade=1`;
+      ? `${v3}/cpf?cpf=${encodeURIComponent(payload.cpf)}&idFinalidade=${finalidade}`
+      : `${v3}/telefone?telefone=${encodeURIComponent(payload.telefone ?? "")}&idFinalidade=${finalidade}`;
     const resp = await fetch(fullUrl, {
       method: "GET",
       headers: {
         Accept: "application/json",
-        Authorization: tok.token,
+        Authorization: `Bearer ${tok.token}`,
       },
     });
     const raw = await resp.json().catch(() => ({}));
@@ -307,22 +338,26 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
       };
     }
     // Mapeia campos comuns; ignora qualquer telefone retornado.
-    // SA Connect Data costuma envelopar a resposta em { resposta: { ... } }
+    // A resposta da API Localize v3 segue o padrão:
+    //   { resposta: { pessoasFisicas: [ { nome, cpf, ... } ] } }
+    // ou
+    //   { resposta: { pessoaFisica: [ ... ] } }   (formato alternativo)
     const root = raw as Record<string, any>;
-    let r: Record<string, any> = (root?.resposta ?? root) as Record<string, any>;
-    const pessoaFisica =
-      Array.isArray(r?.pessoaFisica) &&
-      r.pessoaFisica.length > 0 &&
-      typeof r.pessoaFisica[0] === "object" &&
-      r.pessoaFisica[0] !== null
-        ? r.pessoaFisica[0] as Record<string, any>
-        : null;
-    if (pessoaFisica) {
-      // Respostas por telefone do SA Connect Data costumam retornar os dados em
-      // `resposta.pessoaFisica[0]`, então mesclamos esse objeto à raiz para
-      // reutilizar o mesmo mapeamento de nome/CPF/nascimento/mãe.
-      r = { ...r, ...pessoaFisica };
-    }
+    const resposta = (root?.resposta ?? root) as Record<string, any>;
+
+    // Normaliza: pessoasFisicas[] (padrão PDF) ou pessoaFisica[] (formato antigo)
+    const pessoasFisicasArr: Record<string, any>[] =
+      (Array.isArray(resposta?.pessoasFisicas) && resposta.pessoasFisicas.length > 0)
+        ? resposta.pessoasFisicas
+        : (Array.isArray(resposta?.pessoaFisica) && resposta.pessoaFisica.length > 0)
+          ? resposta.pessoaFisica
+          : [];
+
+    const pessoaFisica: Record<string, any> | null =
+      pessoasFisicasArr.length > 0 ? pessoasFisicasArr[0] : null;
+
+    let r: Record<string, any> = pessoaFisica ?? resposta;
+
     // SA Connect Data Localize v3: dados pessoais ficam em `resposta.dadosCadastrais`
     const dc: Record<string, any> =
       (r?.dadosCadastrais ?? r?.dados_cadastrais ?? {}) as Record<string, any>;
@@ -395,6 +430,37 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
       (Array.isArray(r.emails) ? r.emails[0]?.email ?? r.emails[0]?.enderecoEmail ?? r.emails[0] : null) ??
       null;
     const tituloObj = tituloFromDc ?? r.tituloEleitor ?? r.titulo_eleitor ?? null;
+    // Múltiplos telefones retornados pela API
+    const telefonesApi: TelefoneApi[] = Array.isArray(r.telefones)
+      ? r.telefones.map((t: any) => ({
+          numero: String(t.numero ?? t.telefoneCompleto ?? t.telefone ?? "").replace(/\D/g, ""),
+          tipo: t.tipo ?? t.tipoTelefone ?? null,
+          operadora: t.operadora ?? null,
+          ativo: t.ativo ?? t.status === "ATIVO" ?? null,
+        })).filter((t: TelefoneApi) => t.numero.length >= 8)
+      : [];
+
+    // Múltiplos endereços retornados pela API
+    const enderecosApi: EnderecoApi[] = Array.isArray(r.enderecos)
+      ? r.enderecos.map((e: any) => {
+          const inner = e.dadosEndereco ?? e;
+          return {
+            logradouro: [inner.tipoLogradouro, inner.logradouro ?? inner.rua ?? inner.endereco]
+              .filter(Boolean).join(" ").trim() || null,
+            numero: inner.numero ?? null,
+            complemento: inner.complemento ?? null,
+            bairro: inner.bairro ?? null,
+            cidade: inner.cidade ?? inner.municipio ?? inner.localidade ?? null,
+            estado: inner.uf ?? inner.estado ?? inner.siglaUf ?? null,
+            cep: inner.cep ?? null,
+            tipo: inner.tipo ?? inner.tipoEndereco ?? null,
+            principal: inner.principal ?? e.principal ?? null,
+          };
+        })
+      : endereco
+        ? [{ ...endereco, estado: endereco.uf }]
+        : [];
+
     const result: EnrichResult = {
       cpf:
         (typeof r.cpf === "string" ? r.cpf : null) ??
@@ -409,6 +475,14 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
         dc.maeNome ?? dc.nomeMae ?? dc.nome_mae ?? dc.mae ??
         r.nomeMae ?? r.nome_mae ?? null,
       email: typeof emailRaw === "string" ? emailRaw : (emailRaw?.email ?? null),
+      genero:
+        r.genero ?? r.sexo ?? dc.genero ?? dc.sexo ?? null,
+      estado_civil:
+        r.estadoCivil ?? r.estado_civil ?? dc.estadoCivil ?? dc.estado_civil ?? null,
+      nacionalidade:
+        r.nacionalidade ?? dc.nacionalidade ?? null,
+      profissao:
+        r.profissao ?? r.ocupacao ?? dc.profissao ?? dc.ocupacao ?? null,
       titulo_eleitoral:
         (typeof tituloObj === "object" && tituloObj
           ? tituloObj.numero ?? tituloObj.numeroTitulo ?? tituloObj.titulo ?? tituloObj.inscricao
@@ -423,12 +497,13 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string }): Pro
         r.municipio_eleitoral ?? r.municipioTitulo ?? r.municipio ??
         null,
       endereco,
+      telefones_api: telefonesApi,
+      enderecos_api: enderecosApi,
       _telefone_api_log:
+        telefonesApi[0]?.numero ??
         r.telefone ??
         r.celular ??
-        (Array.isArray(r.telefones)
-          ? r.telefones[0]?.numero ?? r.telefones[0]?.telefoneCompleto ?? null
-          : null),
+        null,
     };
     return {
       ok: true, billable: true, http_status: resp.status, raw, result,
@@ -483,7 +558,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({})) as {
       eleitor_id?: string; cpf?: string; telefone?: string; ping?: boolean;
       validate?: boolean; save_credentials?: boolean;
-      client_id?: string; client_secret?: string;
+      client_id?: string; client_secret?: string; id_finalidade?: number;
     };
 
     // Modo SAVE_CREDENTIALS: persiste o par client_id/secret na tabela
@@ -504,10 +579,18 @@ Deno.serve(async (req: Request) => {
         return jsonRes({ error: "Service role indisponível" }, 500);
       }
       const admin = createClient(SUPABASE_URL, srk);
+      const idFin = Number(body.id_finalidade ?? 1);
       const { error: upErr } = await admin
         .from("analise_provedor_credenciais")
         .upsert(
-          { provedor: "assertiva", client_id: cid, client_secret: csec, updated_by: uid(), updated_at: new Date().toISOString() },
+          {
+            provedor: "assertiva",
+            client_id: cid,
+            client_secret: csec,
+            id_finalidade: idFin,
+            updated_by: uid(),
+            updated_at: new Date().toISOString(),
+          },
           { onConflict: "provedor" },
         );
       if (upErr) {
@@ -677,7 +760,9 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const call = await chamarProvedor(lookupPayload);
+    const creds = await lerCredenciaisProvedor();
+    const idFinalidade = creds.id_finalidade ?? 1;
+    const call = await chamarProvedor({ ...lookupPayload, idFinalidade });
 
     // Encadeamento: se a busca por TELEFONE retornou um CPF mas não um
     // endereço completo (logradouro/CEP), faz uma 2ª consulta por CPF
@@ -689,7 +774,7 @@ Deno.serve(async (req: Request) => {
     ) {
       const cpfDescoberto = onlyDigits(call.result.cpf);
       if (cpfDescoberto.length === 11) {
-        callCpfFollowup = await chamarProvedor({ cpf: cpfDescoberto });
+        callCpfFollowup = await chamarProvedor({ cpf: cpfDescoberto, idFinalidade });
         if (callCpfFollowup.ok) {
           // Mescla campos do CPF por cima, preservando o que já veio do telefone.
           const merged: any = { ...call.result };
@@ -883,6 +968,10 @@ Deno.serve(async (req: Request) => {
 
         // Campos independentes do nome — sempre enriquecidos se vazios
         setIf("email", r.email);
+        setIf("genero", r.genero);
+        setIf("estado_civil", r.estado_civil);
+        setIf("nacionalidade", r.nacionalidade);
+        setIf("profissao", r.profissao);
         setIf("titulo_eleitoral", r.titulo_eleitoral);
         setIf("municipio_eleitoral", r.municipio_eleitoral);
         setIf("rua", end.logradouro);
@@ -890,8 +979,16 @@ Deno.serve(async (req: Request) => {
         setIf("complemento", end.complemento);
         setIf("bairro", end.bairro);
         setIf("cidade", end.cidade);
-        setIf("uf", end.uf);
+        setIf("uf", end.uf ?? end.estado);
         setIf("cep", end.cep);
+
+        // Telefones e endereços: sempre sobrescreve com o array completo da API
+        if ((r.telefones_api ?? []).length > 0) {
+          patch.telefones_api = r.telefones_api;
+        }
+        if ((r.enderecos_api ?? []).length > 0) {
+          patch.enderecos_api = r.enderecos_api;
+        }
       }
 
       // PROTEÇÃO ABSOLUTA: jamais escrever telefone/telefone_original
@@ -899,6 +996,8 @@ Deno.serve(async (req: Request) => {
       delete (patch as any).telefone_original;
 
       patch.data_ultima_consulta = new Date().toISOString();
+      patch.data_ultimo_enriquecimento = new Date().toISOString();
+      patch.status_enriquecimento = bloquearAtualizacaoTotal ? "ERRO" : "SUCESSO";
       patch.score_confianca = divergencia.score;
       // Guarda sempre o nome retornado pelo provedor para comparação — sem sobrescrever o nome manual.
       if (r.nome_completo) patch.nome_api = String(r.nome_completo).trim();
