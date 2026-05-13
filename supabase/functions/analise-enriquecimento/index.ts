@@ -232,9 +232,9 @@ async function obterTokenProvedor(): Promise<
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15_000);
-    // integracao.assertivasolucoes.com.br aceita credenciais no body (OAuth2 padrão)
-    // e também via Basic Auth. Enviamos as duas formas para máxima compatibilidade.
-    const body = new URLSearchParams({
+    // integracao.assertivasolucoes.com.br rejeita Basic Auth no header —
+    // aceita apenas client_id/client_secret no body (padrão OAuth2 §2.3.1).
+    const tokenBody = new URLSearchParams({
       grant_type: "client_credentials",
       client_id: user,
       client_secret: pass,
@@ -242,11 +242,10 @@ async function obterTokenProvedor(): Promise<
     const resp = await fetch(tokenUrl, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${btoa(`${user}:${pass}`)}`,
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
       },
-      body,
+      body: tokenBody,
       signal: ctrl.signal,
     }).finally(() => clearTimeout(timer));
     const raw = await resp.json().catch(() => ({}));
@@ -636,7 +635,6 @@ Deno.serve(async (req: Request) => {
         const resp = await fetch(tokenUrl, {
           method: "POST",
           headers: {
-            Authorization: `Basic ${btoa(`${cid}:${csec}`)}`,
             "Content-Type": "application/x-www-form-urlencoded",
             Accept: "application/json",
           },
