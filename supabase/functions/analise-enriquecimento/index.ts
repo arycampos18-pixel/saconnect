@@ -346,15 +346,21 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string; idFina
         erro: `HTTP ${resp.status}`,
       };
     }
-    // Mapeia campos comuns; ignora qualquer telefone retornado.
-    // A resposta da API Localize v3 segue o padrão:
-    //   { resposta: { pessoasFisicas: [ { nome, cpf, ... } ] } }
-    // ou
-    //   { resposta: { pessoaFisica: [ ... ] } }   (formato alternativo)
+    // Estrutura real da API Assertiva Localize v3:
+    // {
+    //   resposta: {
+    //     dadosCadastrais: { nome, cpf, dataNascimento, nomeMae, ... },  ← CPF
+    //     telefones: { CELULAR: [{numero, operadora, ...}], ... },       ← objeto por tipo
+    //     enderecos: [ {logradouro, numero, bairro, cidade, ...} ],
+    //     emails:    [ {email, ...} ],
+    //     pessoaFisica: [ {...} ]                                         ← Telefone/Nome
+    //   }
+    // }
     const root = raw as Record<string, any>;
     const resposta = (root?.resposta ?? root) as Record<string, any>;
 
-    // Normaliza: pessoasFisicas[] (padrão PDF) ou pessoaFisica[] (formato antigo)
+    // Dados pessoais: pessoasFisicas[]/pessoaFisica[] (busca por tel/nome)
+    // ou dadosCadastrais (busca por CPF)
     const pessoasFisicasArr: Record<string, any>[] =
       (Array.isArray(resposta?.pessoasFisicas) && resposta.pessoasFisicas.length > 0)
         ? resposta.pessoasFisicas
@@ -365,110 +371,93 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string; idFina
     const pessoaFisica: Record<string, any> | null =
       pessoasFisicasArr.length > 0 ? pessoasFisicasArr[0] : null;
 
+    // r = dados pessoais da pessoa (de pessoaFisica[0] ou da raiz de resposta para CPF)
     let r: Record<string, any> = pessoaFisica ?? resposta;
 
-    // SA Connect Data Localize v3: dados pessoais ficam em `resposta.dadosCadastrais`
+    // dadosCadastrais pode estar dentro de pessoaFisica[0] ou diretamente em resposta
     const dc: Record<string, any> =
-      (r?.dadosCadastrais ?? r?.dados_cadastrais ?? {}) as Record<string, any>;
-    try {
-      console.log("[assertiva] dadosCadastrais keys:", Object.keys(dc ?? {}));
-    } catch {}
-    try {
-      console.log("[assertiva] root keys:", Object.keys(r ?? {}));
-      if (pessoaFisica) console.log("[assertiva] pessoaFisica keys:", Object.keys(pessoaFisica));
-    } catch {}
-    // Algumas respostas v3 aninham os dados pessoais em `resposta.cpf` (objeto)
+      (r?.dadosCadastrais ?? resposta?.dadosCadastrais ?? r?.dados_cadastrais ?? {}) as Record<string, any>;
+
+    // CPF aninhado como objeto em r.cpf
     if (r && typeof r.cpf === "object" && r.cpf !== null) {
       r = { ...r.cpf, ...r };
       if (typeof (r.cpf as any)?.numeroCpf === "string") {
         (r as any).cpf = (r.cpf as any).numeroCpf;
       }
     }
-    // Título de eleitor pode estar em dadosCadastrais.tituloEleitor (objeto)
-    const tituloFromDc =
-      dc.tituloEleitor ?? dc.titulo_eleitor ?? dc.titulo ?? null;
-    // Endereço pode vir em vários lugares dependendo do endpoint:
-    //  - resposta.endereco / resposta.enderecos[]
-    //  - resposta.pessoaFisica[0].enderecos[]
-    //  - resposta.dadosCadastrais.enderecos[] / .endereco
-    //  - resposta.enderecos[].dadosEndereco (Localize v3)
-    const pickFirst = (v: any) =>
-      Array.isArray(v) && v.length > 0 ? v[0] : null;
-    let endRaw: any =
-      r.endereco ??
-      pickFirst(r.enderecos) ??
-      (pessoaFisica ? (pessoaFisica as any).endereco ?? pickFirst((pessoaFisica as any).enderecos) : null) ??
-      pickFirst((dc as any)?.enderecos) ??
-      (dc as any)?.endereco ??
-      null;
-    // Fallback: endpoint /telefone do SA Connect Data costuma devolver apenas
-    // `cidade` e `uf` na raiz (sem logradouro/bairro/CEP). Monta um
-    // endereço parcial para que ao menos cidade/UF apareçam no resultado.
-    if (!endRaw) {
-      const cidadeRoot = r.cidade ?? r.municipio ?? (pessoaFisica as any)?.cidade ?? null;
-      const ufRoot = r.uf ?? r.estado ?? (pessoaFisica as any)?.uf ?? null;
-      if (cidadeRoot || ufRoot) {
-        endRaw = { cidade: cidadeRoot, uf: ufRoot };
-      }
-    }
-    // alguns retornos envelopam em { dadosEndereco: {...} }
-    if (endRaw && typeof endRaw === "object" && endRaw.dadosEndereco) {
-      endRaw = { ...endRaw, ...endRaw.dadosEndereco };
-    }
-    try {
-      if (endRaw) console.log("[assertiva] endereco keys:", Object.keys(endRaw));
-      else console.log("[assertiva] endereco: nenhum encontrado");
-    } catch {}
-    const endereco = endRaw
-      ? {
-          logradouro: (() => {
-            const base = endRaw.logradouro ?? endRaw.rua ?? endRaw.endereco ?? null;
-            if (!base && !endRaw.tipoLogradouro) return null;
-            return [endRaw.tipoLogradouro, base].filter(Boolean).join(" ").trim() || null;
-          })(),
-          numero: endRaw.numero ?? endRaw.num ?? null,
-          complemento: endRaw.complemento ?? endRaw.compl ?? null,
-          bairro: endRaw.bairro ?? null,
-          cidade: endRaw.cidade ?? endRaw.municipio ?? endRaw.localidade ?? null,
-          uf: endRaw.uf ?? endRaw.estado ?? endRaw.siglaUf ?? null,
-          cep: endRaw.cep ?? null,
-        }
-      : null;
+
+    // ── Título de eleitor ────────────────────────────────────────────────────
+    const tituloFromDc = dc.tituloEleitor ?? dc.titulo_eleitor ?? dc.titulo ?? null;
+    const tituloObj = tituloFromDc ?? r.tituloEleitor ?? r.titulo_eleitor ?? null;
+
+    // ── Email ────────────────────────────────────────────────────────────────
+    // resposta.emails é array: [{email: "..."}, ...] ou [string, ...]
+    const emailsArr: any[] = Array.isArray(resposta.emails)
+      ? resposta.emails
+      : Array.isArray(r.emails) ? r.emails : [];
     const emailRaw =
       r.email ??
-      (Array.isArray(r.emails) ? r.emails[0]?.email ?? r.emails[0]?.enderecoEmail ?? r.emails[0] : null) ??
-      null;
-    const tituloObj = tituloFromDc ?? r.tituloEleitor ?? r.titulo_eleitor ?? null;
-    // Múltiplos telefones retornados pela API
-    const telefonesApi: TelefoneApi[] = Array.isArray(r.telefones)
-      ? r.telefones.map((t: any) => ({
-          numero: String(t.numero ?? t.telefoneCompleto ?? t.telefone ?? "").replace(/\D/g, ""),
-          tipo: t.tipo ?? t.tipoTelefone ?? null,
-          operadora: t.operadora ?? null,
-          ativo: t.ativo ?? t.status === "ATIVO" ?? null,
-        })).filter((t: TelefoneApi) => t.numero.length >= 8)
-      : [];
+      dc.email ??
+      (emailsArr.length > 0
+        ? (emailsArr[0]?.email ?? emailsArr[0]?.enderecoEmail ?? (typeof emailsArr[0] === "string" ? emailsArr[0] : null))
+        : null);
 
-    // Múltiplos endereços retornados pela API
-    const enderecosApi: EnderecoApi[] = Array.isArray(r.enderecos)
-      ? r.enderecos.map((e: any) => {
-          const inner = e.dadosEndereco ?? e;
-          return {
-            logradouro: [inner.tipoLogradouro, inner.logradouro ?? inner.rua ?? inner.endereco]
-              .filter(Boolean).join(" ").trim() || null,
-            numero: inner.numero ?? null,
-            complemento: inner.complemento ?? null,
-            bairro: inner.bairro ?? null,
-            cidade: inner.cidade ?? inner.municipio ?? inner.localidade ?? null,
-            estado: inner.uf ?? inner.estado ?? inner.siglaUf ?? null,
-            cep: inner.cep ?? null,
-            tipo: inner.tipo ?? inner.tipoEndereco ?? null,
-            principal: inner.principal ?? e.principal ?? null,
-          };
-        })
-      : endereco
-        ? [{ ...endereco, estado: endereco.uf }]
-        : [];
+    // ── Telefones ────────────────────────────────────────────────────────────
+    // resposta.telefones é objeto: { CELULAR: [{numero, operadora, ...}], RESIDENCIAL: [...] }
+    // Achata para array independente do formato
+    const telefonesRaw: any = resposta.telefones ?? r.telefones ?? {};
+    let telefonesApi: TelefoneApi[] = [];
+    if (Array.isArray(telefonesRaw)) {
+      telefonesApi = telefonesRaw;
+    } else if (telefonesRaw && typeof telefonesRaw === "object") {
+      // { CELULAR: [{...}], RESIDENCIAL: [{...}], ... }
+      for (const [tipo, itens] of Object.entries(telefonesRaw)) {
+        const lista = Array.isArray(itens) ? itens : [itens];
+        for (const t of lista) {
+          if (!t) continue;
+          const num = String(t.numero ?? t.telefoneCompleto ?? t.telefone ?? t ?? "").replace(/\D/g, "");
+          if (num.length >= 8) {
+            telefonesApi.push({
+              numero: num,
+              tipo: t.tipo ?? t.tipoTelefone ?? tipo ?? null,
+              operadora: t.operadora ?? null,
+              ativo: t.ativo ?? (t.status === "ATIVO") ?? null,
+            });
+          }
+        }
+      }
+    }
+
+    // ── Endereços ────────────────────────────────────────────────────────────
+    // resposta.enderecos é array de objetos de endereço
+    const enderecosRaw: any[] = Array.isArray(resposta.enderecos) && resposta.enderecos.length > 0
+      ? resposta.enderecos
+      : Array.isArray(r.enderecos) && r.enderecos.length > 0
+        ? r.enderecos
+        : Array.isArray(dc?.enderecos) ? dc.enderecos : [];
+
+    const mapEndereco = (e: any): EnderecoApi => {
+      const inner = e?.dadosEndereco ?? e ?? {};
+      return {
+        logradouro: [inner.tipoLogradouro, inner.logradouro ?? inner.rua ?? inner.nomeLogradouro]
+          .filter(Boolean).join(" ").trim() || null,
+        numero: inner.numero ?? null,
+        complemento: inner.complemento ?? null,
+        bairro: inner.bairro ?? null,
+        cidade: inner.cidade ?? inner.municipio ?? inner.localidade ?? inner.nomeCidade ?? null,
+        estado: inner.uf ?? inner.estado ?? inner.siglaUf ?? inner.nomeEstado ?? null,
+        cep: inner.cep ?? null,
+        tipo: inner.tipo ?? inner.tipoEndereco ?? inner.tipoLogradouro ?? null,
+        principal: inner.principal ?? e?.principal ?? null,
+      };
+    };
+    const enderecosApi: EnderecoApi[] = enderecosRaw.map(mapEndereco);
+    const endereco: EnderecoApi | null = enderecosApi.length > 0 ? enderecosApi[0] : (() => {
+      // Fallback: cidade/UF avulsas na raiz
+      const cidade = r.cidade ?? r.municipio ?? dc.cidade ?? null;
+      const uf = r.uf ?? r.estado ?? dc.uf ?? null;
+      return (cidade || uf) ? { cidade, estado: uf } : null;
+    })();
 
     const result: EnrichResult = {
       cpf:
