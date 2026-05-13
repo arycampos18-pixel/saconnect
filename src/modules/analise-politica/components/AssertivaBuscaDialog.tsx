@@ -75,15 +75,24 @@ export function AssertivaBuscaDialog({
   open,
   onOpenChange,
   onSuccess,
+  initialCpf,
+  initialTelefone,
 }: {
   eleitorId: string;
   eleitorNome: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSuccess?: () => void;
+  initialCpf?: string | null;
+  initialTelefone?: string | null;
 }) {
-  const [cpf, setCpf] = useState("");
-  const [telefone, setTelefone] = useState("");
+  const cpfLimpo = (initialCpf ?? "").replace(/\D/g, "");
+  const telLimpo = (initialTelefone ?? "").replace(/\D/g, "");
+  // Aba padrão: CPF se tiver, senão telefone
+  const abaInicial: "cpf" | "telefone" = cpfLimpo.length === 11 ? "cpf" : "telefone";
+
+  const [cpf, setCpf] = useState(cpfLimpo.length === 11 ? initialCpf ?? "" : "");
+  const [telefone, setTelefone] = useState(telLimpo.length >= 10 ? telLimpo : "");
   const [resultado, setResultado] = useState<BuscaResultado | null>(null);
   const qc = useQueryClient();
 
@@ -153,7 +162,7 @@ export function AssertivaBuscaDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="cpf">
+        <Tabs defaultValue={abaInicial}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="cpf">
               <CreditCard className="h-4 w-4 mr-1.5" /> Buscar por CPF

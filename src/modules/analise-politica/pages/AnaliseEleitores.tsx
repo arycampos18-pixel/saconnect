@@ -24,7 +24,7 @@ const sb: any = supabase;
 export default function AnaliseEleitores() {
   const [validar, setValidar] = useState<{ id: string; nome: string; telefone?: string | null; auto?: boolean } | null>(null);
   const [enriquecendoId, setEnriquecendoId] = useState<string | null>(null);
-  const [buscandoEleitor, setBuscandoEleitor] = useState<{ id: string; nome: string } | null>(null);
+  const [buscandoEleitor, setBuscandoEleitor] = useState<{ id: string; nome: string; cpf?: string | null; telefone?: string | null } | null>(null);
   const [tseId, setTseId] = useState<string | null>(null);
   // mapa de estado visual por eleitor: "ok" | "erro" | null
   const [tseResultado, setTseResultado] = useState<Record<string, "ok" | "erro">>({});
@@ -282,7 +282,7 @@ export default function AnaliseEleitores() {
                           </Button>
                         )}
                         <Button size="sm" variant="outline"
-                          onClick={() => setBuscandoEleitor({ id: e.id, nome: e.nome })}>
+                          onClick={() => setBuscandoEleitor({ id: e.id, nome: e.nome, cpf: e.cpf, telefone: e.telefone_original ?? e.telefone })}>
                           <Sparkles className="h-3 w-3 mr-1" />
                           Enriquecer
                         </Button>
@@ -357,6 +357,8 @@ export default function AnaliseEleitores() {
         <AssertivaBuscaDialog
           eleitorId={buscandoEleitor.id}
           eleitorNome={buscandoEleitor.nome}
+          initialCpf={buscandoEleitor.cpf}
+          initialTelefone={buscandoEleitor.telefone}
           open={!!buscandoEleitor}
           onOpenChange={(v) => !v && setBuscandoEleitor(null)}
           onSuccess={() => qc.invalidateQueries({ queryKey: ["analise-eleitores"] })}

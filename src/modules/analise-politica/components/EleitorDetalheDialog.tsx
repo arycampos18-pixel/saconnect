@@ -176,6 +176,8 @@ export function EleitorDetalheDialog({
     <AssertivaBuscaDialog
       eleitorId={e.id}
       eleitorNome={e.nome}
+      initialCpf={e.cpf}
+      initialTelefone={e.telefone_original ?? e.telefone}
       open={buscando}
       onOpenChange={setBuscando}
       onSuccess={() => {}}
