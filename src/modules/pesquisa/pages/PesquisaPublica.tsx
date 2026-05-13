@@ -17,8 +17,32 @@ import { formatPhoneBR } from "@/shared/utils/phone";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ?? "";
-/** Se definido, POST do OTP usa esta URL (mesmo domínio do site + proxy Nginx → Supabase). */
+/** Se definido, POST do OTP usa proxy no mesmo site (recomendado: `/api/public-enviar-otp`). */
 const PUBLIC_OTP_SEND_URL = (import.meta.env.VITE_PUBLIC_OTP_SEND_URL as string | undefined)?.trim() ?? "";
+
+/** URL final do POST do OTP: Supabase direto ou proxy (caminho relativo = mesmo HTTPS do site). */
+function resolvePublicOtpPostUrl(): string {
+  const raw = PUBLIC_OTP_SEND_URL;
+  if (!raw) {
+    return `${SUPABASE_URL}/functions/v1/public-enviar-otp`;
+  }
+  if (raw.startsWith("/")) {
+    return `${window.location.origin}${raw}`;
+  }
+  try {
+    const u = new URL(raw);
+    if (
+      typeof window !== "undefined" &&
+      window.location.protocol === "https:" &&
+      u.hostname === window.location.hostname
+    ) {
+      return `${window.location.origin}${u.pathname}${u.search}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return raw;
+}
 
 // Cliente anon — sem JWT, contorna RESTRICTIVE policy tenant_active_company_guard
 const anonSb =
@@ -41,9 +65,7 @@ async function postPublicEnviarOtp(body: { telefone: string; nome?: string }): P
         "Configuração do aplicativo incompleta (Supabase). O build do site precisa de VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY — não use o domínio do site no lugar da URL *.supabase.co.",
     };
   }
-  const url =
-    PUBLIC_OTP_SEND_URL ||
-    `${SUPABASE_URL}/functions/v1/public-enviar-otp`;
+  const url = resolvePublicOtpPostUrl();
   const ac = new AbortController();
   const t = window.setTimeout(() => ac.abort(), 28_000);
   try {
@@ -79,13 +101,13 @@ async function postPublicEnviarOtp(body: { telefone: string; nome?: string }): P
         return {
           ok: false,
           errorMsg:
-            "Não foi possível contactar o endereço configurado para o envio do código. Verifique a rede, o Nginx e o rebuild com VITE_PUBLIC_OTP_SEND_URL.",
+            "Não foi possível contactar o proxy do envio do código. Confirme no Nginx o bloco `location = /api/public-enviar-otp` e faça `nginx -t` + reload. No .env use caminho relativo: VITE_PUBLIC_OTP_SEND_URL=/api/public-enviar-otp (mesmo HTTPS que o site).",
         };
       }
       return {
         ok: false,
         errorMsg:
-          `Falha de rede ao contactar o Supabase (envio do código). Tente outro Wi‑Fi/dados móveis, desative bloqueadores ou confirme o certificado HTTPS. Solução em redes restritas: proxy no Nginx em ${curOrigin}/api/public-enviar-otp → função public-enviar-otp, depois no .env VITE_PUBLIC_OTP_SEND_URL=${curOrigin}/api/public-enviar-otp e npm run build (ver .env.example).`,
+          "Falha de rede ao contactar o Supabase (envio do código). Tente outra rede, desative bloqueadores ou configure proxy no Nginx e no .env: VITE_PUBLIC_OTP_SEND_URL=/api/public-enviar-otp (caminho relativo — evita bloqueio HTTPS→HTTP). Rebuild obrigatório. Detalhes em .env.example.",
       };
     }
     return { ok: false, errorMsg: msg };

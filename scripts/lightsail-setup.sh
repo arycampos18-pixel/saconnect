@@ -36,9 +36,9 @@ server {
     location / {
         try_files \$uri \$uri/ /index.html;
     }
-    # Descomente após preencher REF e rebuildar o frontend com:
-    #   VITE_PUBLIC_OTP_SEND_URL=https://SEU_DOMINIO/api/public-enviar-otp
-    # Isto faz o POST do OTP ir para o mesmo domínio (evita bloqueios a *.supabase.co).
+    # Descomente, troque REF pelo ref do projeto Supabase, e no .env:
+    #   VITE_PUBLIC_OTP_SEND_URL=/api/public-enviar-otp
+    # Depois: npm run build. (Caminho relativo = mesmo HTTPS da página — evita mixed content.)
     #location = /api/public-enviar-otp {
     #    proxy_pass https://REF.supabase.co/functions/v1/public-enviar-otp;
     #    proxy_http_version 1.1;
