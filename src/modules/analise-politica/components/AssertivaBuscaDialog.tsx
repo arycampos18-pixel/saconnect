@@ -115,7 +115,19 @@ export function AssertivaBuscaDialog({
         "analise-enriquecimento",
         { body },
       );
-      if (error) throw new Error(error.message ?? "Erro na consulta");
+      if (error) {
+        // Tenta extrair mensagem do corpo da resposta da Edge Function
+        let msg = error.message ?? "Erro na consulta";
+        try {
+          const ctx = (error as any).context;
+          const parsed = typeof ctx?.json === "function"
+            ? await ctx.json()
+            : (typeof ctx === "object" ? ctx : null);
+          if (parsed?.error) msg = String(parsed.error);
+          else if (parsed?.message) msg = String(parsed.message);
+        } catch { /* usa msg padrão */ }
+        throw new Error(msg);
+      }
       return data as BuscaResultado;
     },
     onSuccess: (data) => {
