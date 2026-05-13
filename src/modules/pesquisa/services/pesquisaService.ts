@@ -73,13 +73,20 @@ export const pesquisaService = {
   },
 
   async getBySlug(slug: string): Promise<{ pesquisa: Pesquisa; perguntas: Pergunta[] } | null> {
-    const { data, error } = await supabase
-      .from("pesquisas")
-      .select("*")
-      .eq("slug", slug)
-      .eq("status", "Ativa")
-      .maybeSingle();
-    if (error) throw error;
+    const sb: any = supabase;
+    // 1) tenta short_code (coluna nova, pode não existir ainda)
+    // 2) slug exato
+    // 3) slug LIKE prefix (short_code são os primeiros 7 chars do slug)
+    let data: any = null;
+    const tries = [
+      sb.from("pesquisas").select("*").eq("status", "Ativa").eq("short_code", slug).maybeSingle(),
+      sb.from("pesquisas").select("*").eq("status", "Ativa").eq("slug", slug).maybeSingle(),
+      sb.from("pesquisas").select("*").eq("status", "Ativa").like("slug", `${slug}%`).maybeSingle(),
+    ];
+    for (const q of tries) {
+      const { data: d } = await q;
+      if (d) { data = d; break; }
+    }
     if (!data) return null;
     const { data: perguntas, error: pe } = await supabase
       .from("pesquisa_perguntas")
