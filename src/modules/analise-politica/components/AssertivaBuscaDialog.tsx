@@ -104,7 +104,9 @@ export function AssertivaBuscaDialog({
 
   const buscarMut = useMutation({
     mutationFn: async (tipo: "cpf" | "telefone") => {
-      const body: Record<string, any> = { eleitor_id: eleitorId };
+      // Chama SEM eleitor_id — igual ao "Testar com CPF/Telefone" que funciona.
+      // A atualização do eleitor é feita separadamente pelo cliente Supabase.
+      const body: Record<string, any> = {};
       if (tipo === "cpf") {
         if (!cpfValido) throw new Error("CPF inválido. Informe os 11 dígitos.");
         body.cpf = cpfDigits;
@@ -112,34 +114,85 @@ export function AssertivaBuscaDialog({
         if (!telValido) throw new Error("Telefone inválido. Informe ao menos 10 dígitos.");
         body.telefone = telDigits;
       }
+
       const { data, error } = await supabase.functions.invoke<any>(
         "analise-enriquecimento",
         { body },
       );
 
-      // Mesmo padrão do Testar com CPF/Telefone em AnaliseIntegracoes
+      // Extrai erro da Edge Function (mesmo padrão dos botões Testar)
       const ctx = (error as any)?.context;
       if (ctx) {
         let parsed: any = null;
         try { parsed = await ctx.json(); } catch {
           try { parsed = { error: await ctx.text() }; } catch { /* ignore */ }
         }
-        const msg = parsed?.error ?? parsed?.erro ?? (error as any)?.message ?? "Falha na consulta";
-        const r: BuscaResultado = {
+        return {
           ok: false,
-          errorMsg: msg,
+          errorMsg: parsed?.error ?? parsed?.erro ?? (error as any)?.message ?? "Falha na consulta",
           dados: parsed,
-        };
-        return r;
+        } as BuscaResultado;
       }
       if (error) throw new Error((error as any).message ?? "Erro na consulta");
       if (data?.error || data?.erro) {
-        return { ok: false, errorMsg: data.error ?? data.erro, dados: data };
+        return { ok: false, errorMsg: data.error ?? data.erro, dados: data } as BuscaResultado;
       }
-      return data as BuscaResultado;
+
+      // Consulta OK — aplica dados no eleitor direto pelo cliente Supabase
+      const d = data?.dados ?? {};
+      if (data?.success && eleitorId) {
+        const end = d.endereco ?? (d.enderecos_api?.[0]) ?? {};
+        const patch: Record<string, any> = {};
+        const set = (k: string, v: any) => { if (v != null && v !== "") patch[k] = v; };
+
+        set("nome", d.nome_completo);
+        set("cpf", (d.cpf ?? "").replace(/\D/g, "") || undefined);
+        set("data_nascimento", d.data_nascimento);
+        set("nome_mae", d.nome_mae);
+        set("email", d.email);
+        set("genero", d.genero);
+        set("estado_civil", d.estado_civil);
+        set("nacionalidade", d.nacionalidade);
+        set("profissao", d.profissao);
+        set("rua", end.logradouro);
+        set("numero", end.numero);
+        set("complemento", end.complemento);
+        set("bairro", end.bairro);
+        set("cidade", end.cidade);
+        set("uf", end.uf ?? end.estado);
+        set("cep", end.cep);
+        set("titulo_eleitoral", d.titulo_eleitoral);
+        set("municipio_eleitoral", d.municipio_eleitoral);
+        if ((d.telefones_api ?? []).length > 0) patch.telefones_api = d.telefones_api;
+        if ((d.enderecos_api ?? []).length > 0) patch.enderecos_api = d.enderecos_api;
+        patch.data_ultimo_enriquecimento = new Date().toISOString();
+        patch.status_enriquecimento = "SUCESSO";
+
+        const camposAplicados = Object.keys(patch).filter(
+          k => !["data_ultimo_enriquecimento", "status_enriquecimento"].includes(k)
+        );
+
+        if (camposAplicados.length > 0) {
+          await (supabase as any).from("eleitores").update(patch).eq("id", eleitorId);
+        }
+
+        return {
+          ok: true,
+          dados: d,
+          campos_aplicados: camposAplicados,
+        } as BuscaResultado;
+      }
+
+      // Sem dados (skipped ou vazio)
+      return {
+        ok: data?.success ?? false,
+        skipped: data?.skipped ?? !data?.success,
+        motivo: data?.skipped ? (data.motivo ?? "Nenhuma pessoa encontrada com esses dados.") : undefined,
+        dados: d,
+        campos_aplicados: [],
+      } as BuscaResultado;
     },
     onSuccess: (data) => {
-      // Normaliza errorMsg → erro
       if (data?.errorMsg && !data.erro) data.erro = data.errorMsg;
       setResultado(data);
       if (data?.ok && !data?.skipped) {
