@@ -114,9 +114,9 @@ function ocultarAssertivaEmTextoUi(s: string): string {
 const docs: Record<string, { url: string; secret: string; comoObter: string }> = {
   infosimples: {
     url: "",
-    secret: "DIRECTD_TOKEN (ou configurado pelo botòo Conectar)",
+    secret: "DIRECTD_TOKEN (ou configurado pelo botùo Conectar)",
     comoObter:
-      "No painel da integraòòo ? històrico de consultas ? URL da consulta ? copie o valor do paròmetro TOKEN. Cole abaixo e clique em Salvar token.",
+      "No painel da integraùùo ? histùrico de consultas ? URL da consulta ? copie o valor do parùmetro TOKEN. Cole abaixo e clique em Salvar token.",
   },
   enriquecimento: {
     url: "",
@@ -1669,10 +1669,10 @@ export function IntegracoesPanel() {
                 onChange={(e) => setCredFinalidade(Number(e.target.value))}
                 disabled={credLoading}
               >
-                <option value={1}>1 ò Confirma??o de Identidade</option>
-                <option value={2}>2 ò Ciclo de Cr?dito</option>
-                <option value={4}>4 ò Execu??o de Contrato</option>
-                <option value={5}>5 ò Leg?timo Interesse</option>
+                <option value={1}>1 ù Confirma??o de Identidade</option>
+                <option value={2}>2 ù Ciclo de Cr?dito</option>
+                <option value={4}>4 ù Execu??o de Contrato</option>
+                <option value={5}>5 ù Leg?timo Interesse</option>
               </select>
               <p className="text-xs text-muted-foreground">
                 Exigido pela LGPD em todas as consultas ? API.
@@ -1743,7 +1743,7 @@ export function IntegracoesPanel() {
                   )}
                   <span className={credResult.ok ? "text-emerald-800 dark:text-emerald-300" : credResult.http_status === 401 ? "text-amber-800 dark:text-amber-300" : "text-destructive"}>
                     {credResult.ok
-                      ? "? Credenciais v?lidas ó conex?o estabelecida!"
+                      ? "? Credenciais v?lidas ù conex?o estabelecida!"
                       : credResult.http_status === 401
                         ? "? Client ID ou Client Secret incorretos"
                         : credResult.http_status === 403
@@ -1777,7 +1777,7 @@ export function IntegracoesPanel() {
                 {/* Token info (sucesso) */}
                 {credResult.ok && credResult.expires_in && (
                   <div className="text-xs text-emerald-700 dark:text-emerald-400">
-                    Token v?lido por {credResult.expires_in} segundos ∑ {credResult.duracao_ms}ms
+                    Token v?lido por {credResult.expires_in} segundos ù {credResult.duracao_ms}ms
                   </div>
                 )}
 
@@ -1802,8 +1802,16 @@ export function IntegracoesPanel() {
                   </details>
                 )}
                 {credResult.ok && !credSaved && (
+                  <div className="rounded-lg border-2 border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-2">
+                    <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 shrink-0" />
+                      Credenciais vùlidas! Clique abaixo para salvar no sistema.
+                    </p>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                      Sem salvar, as credenciais sùo perdidas ao fechar o modal.
+                    </p>
                   <Button
-                    className="w-full mt-2"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                     variant="default"
                     disabled={credSaving}
                     onClick={async () => {
@@ -1840,8 +1848,9 @@ export function IntegracoesPanel() {
                     ) : (
                       <KeyRound className="h-4 w-4 mr-1" />
                     )}
-                    Salvar credenciais
+                    Salvar credenciais no sistema
                   </Button>
+                  </div>
                 )}
                 {credSaved && (
                   <div className="text-xs text-emerald-700 dark:text-emerald-400 border-t pt-2 flex items-center gap-1">

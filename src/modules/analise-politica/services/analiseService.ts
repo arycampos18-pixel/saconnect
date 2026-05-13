@@ -35,10 +35,10 @@ export const analiseService = {
     let q = sb
       .from("eleitores")
       .select(
-        "*, lideranca:liderancas!eleitores_lideranca_id_fkey(id,nome), cabo:cabos_eleitorais!eleitores_cabo_eleitoral_id_fkey(id,nome), eleitor_tags(tag:tags(id,nome,cor))"
+        "*, lideranca:liderancas!lideranca_id(id,nome), cabo:cabos_eleitorais!cabo_eleitoral_id(id,nome), eleitor_tags(tag:tags(id,nome,cor))"
       )
       .order("created_at", { ascending: false })
-      .limit(1000);
+      .limit(2000);
     if (filtros.bairro && filtros.bairro !== "todos") q = q.eq("bairro", filtros.bairro);
     if (filtros.liderancaId && filtros.liderancaId !== "todas") q = q.eq("lideranca_id", filtros.liderancaId);
     if (filtros.caboId && filtros.caboId !== "todos") q = q.eq("cabo_eleitoral_id", filtros.caboId);
