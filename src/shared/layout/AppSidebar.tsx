@@ -48,6 +48,7 @@ import {
    LayoutDashboard,
    Package,
    ScanSearch,
+   Link2,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -216,6 +217,7 @@ const main: Item[] = [
       { title: "Visão Geral", url: "/app/eventos", icon: BarChart3 },
       { title: "Agenda / Eventos", url: "/app/political/agenda-eventos", icon: CalendarDays },
       { title: "Pesquisas", url: "/app/political/polls", icon: ListChecks },
+      { title: "Links Curtos", url: "/app/links", icon: Link2 },
       { title: "Aniversariantes", url: "/app/political/birthdays", icon: Cake },
     ],
   },

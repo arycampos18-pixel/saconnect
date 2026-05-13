@@ -36,6 +36,8 @@ const Pesquisas = lazy(() => import("@/modules/pesquisa/pages/Pesquisas"));
 const NovaPesquisa = lazy(() => import("@/modules/pesquisa/pages/NovaPesquisa"));
 const Resultados = lazy(() => import("@/modules/pesquisa/pages/Resultados"));
 const PesquisaPublica = lazy(() => import("@/modules/pesquisa/pages/PesquisaPublica"));
+const LinkRedirect = lazy(() => import("@/modules/links/pages/LinkRedirect"));
+const GerenciadorLinks = lazy(() => import("@/modules/links/pages/GerenciadorLinks"));
 const Mapa = lazy(() => import("@/modules/mapa/pages/Mapa"));
 const Relatorios = lazy(() => import("@/modules/relatorios/pages/Relatorios"));
 const RelatoriosHub = lazy(() => import("@/modules/relatorios/pages/RelatoriosHub"));
@@ -229,6 +231,10 @@ const App = () => (
             <Route path="/cadastro-publico" element={<CadastroPublico />} />
             <Route path="/p/:slug" element={<PesquisaPublica />} />
             <Route path="/cabo/r/:token" element={<CadastroCaboPublico />} />
+            {/* Sistema de links curtos — /l/:codigo, /w/:codigo, /go/:codigo */}
+            <Route path="/l/:codigo" element={<LinkRedirect />} />
+            <Route path="/w/:codigo" element={<LinkRedirect />} />
+            <Route path="/go/:codigo" element={<LinkRedirect />} />
             <Route
               path="/app"
               element={
@@ -257,9 +263,10 @@ const App = () => (
               <Route path="pessoas" element={<Navigate to="/app/political/dashboard" replace />} />
               <Route path="pessoas/*" element={<Navigate to="/app/political/dashboard" replace />} />
               <Route path="pesquisas" element={<Navigate to="/app/political/polls" replace />} />
-              <Route path="pesquisas/nova" element={<NovaPesquisa />} />
-              <Route path="pesquisas/:id/editar" element={<NovaPesquisa />} />
-              <Route path="pesquisas/:id" element={<Resultados />} />
+            <Route path="pesquisas/nova" element={<NovaPesquisa />} />
+            <Route path="pesquisas/:id/editar" element={<NovaPesquisa />} />
+            <Route path="pesquisas/:id" element={<Resultados />} />
+            <Route path="links" element={<GerenciadorLinks />} />
               <Route path="mapa" element={<Navigate to="/app/political/map" replace />} />
               <Route path="relatorios" element={<RelatoriosHub />} />
               <Route path="predicao" element={<Navigate to="/app/political/predictions" replace />} />
