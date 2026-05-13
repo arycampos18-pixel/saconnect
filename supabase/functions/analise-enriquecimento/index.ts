@@ -186,17 +186,17 @@ function jsonRes(data: unknown, status = 200) {
 }
 
 function resolveProvedorApiHost(base?: string | null): string {
-  // A URL correta conforme documentação oficial é integracao.assertivasolucoes.com.br
-  if (!base) return "integracao.assertivasolucoes.com.br";
+  // Servidor de produção Assertiva: api.assertivasolucoes.com.br
+  // integracao.assertivasolucoes.com.br é o portal de documentação/sandbox
+  if (!base) return "api.assertivasolucoes.com.br";
   try {
     const url = new URL(base.replace(/\/+$/, ""));
-    // Se o usuário configurou a URL de documentação, corrige para produção
-    if (url.pathname.includes("/v3/doc")) {
-      return "integracao.assertivasolucoes.com.br";
+    if (url.pathname.includes("/v3/doc") || url.host.startsWith("integracao.")) {
+      return "api.assertivasolucoes.com.br";
     }
     return url.host;
   } catch {
-    return "integracao.assertivasolucoes.com.br";
+    return "api.assertivasolucoes.com.br";
   }
 }
 
@@ -222,30 +222,21 @@ async function obterTokenProvedor(): Promise<
   // Extraímos só o host e forçamos `api.assertivasolucoes.com.br` quando
   // o usuário colou a URL de documentação (`integracao...` ou `/v3/doc`).
   const host = resolveProvedorApiHost(base || null);
-  // integracao.assertivasolucoes.com.br usa /v3/token (sem /oauth2/)
-  // api.assertivasolucoes.com.br usa /oauth2/v3/token
-  const tokenPath = host.startsWith("integracao.") ? "/v3/token" : "/oauth2/v3/token";
-  const tokenUrl = `https://${host}${tokenPath}`;
+  const tokenUrl = `https://${host}/oauth2/v3/token`;
   // Exposto p/ logs/diagnóstico (último endpoint usado nesta instância)
   ultimoOauthEndpoint = tokenUrl;
   console.log("[assertiva] solicitando token em", tokenUrl);
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15_000);
-    // integracao.assertivasolucoes.com.br rejeita Basic Auth no header —
-    // aceita apenas client_id/client_secret no body (padrão OAuth2 §2.3.1).
-    const tokenBody = new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: user,
-      client_secret: pass,
-    }).toString();
     const resp = await fetch(tokenUrl, {
       method: "POST",
       headers: {
+        Authorization: `Basic ${btoa(`${user}:${pass}`)}`,
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
       },
-      body: tokenBody,
+      body: "grant_type=client_credentials",
       signal: ctrl.signal,
     }).finally(() => clearTimeout(timer));
     const raw = await resp.json().catch(() => ({}));
@@ -319,7 +310,7 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string; idFina
     }
     // 2) Endpoints SA Connect Data Localize v3.
     const finalidade = payload.idFinalidade ?? 1;
-    const v3 = `https://${host}/v3/localize/v3`;
+    const v3 = `https://${host}/localize/v3`;
     const fullUrl = payload.cpf
       ? `${v3}/cpf?cpf=${encodeURIComponent(payload.cpf)}&idFinalidade=${finalidade}`
       : `${v3}/telefone?telefone=${encodeURIComponent(payload.telefone ?? "")}&idFinalidade=${finalidade}`;
@@ -611,23 +602,19 @@ Deno.serve(async (req: Request) => {
           ok: false, modo, erro: "Informe Client ID e Client Secret para validar.",
         }, 200);
       }
-      const tokenUrl = "https://integracao.assertivasolucoes.com.br/v3/token";
+      const tokenUrl = "https://api.assertivasolucoes.com.br/oauth2/v3/token";
       const started = Date.now();
       try {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 15_000);
-        const validateBody = new URLSearchParams({
-          grant_type: "client_credentials",
-          client_id: cid,
-          client_secret: csec,
-        }).toString();
         const resp = await fetch(tokenUrl, {
           method: "POST",
           headers: {
+            Authorization: `Basic ${btoa(`${cid}:${csec}`)}`,
             "Content-Type": "application/x-www-form-urlencoded",
             Accept: "application/json",
           },
-          body: validateBody,
+          body: "grant_type=client_credentials",
           signal: ctrl.signal,
         }).finally(() => clearTimeout(timer));
         const raw = await resp.json().catch(() => ({}));
