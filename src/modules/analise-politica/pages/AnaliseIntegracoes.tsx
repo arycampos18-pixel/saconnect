@@ -1724,48 +1724,83 @@ export function IntegracoesPanel() {
 
             {credResult && (
               <div
-                className={`rounded border p-3 text-sm space-y-2 ${
+                className={`rounded-lg border p-4 text-sm space-y-3 ${
                   credResult.ok
-                    ? "border-emerald-500/40 bg-emerald-500/10"
-                    : "border-destructive/40 bg-destructive/10"
+                    ? "border-emerald-400/60 bg-emerald-50 dark:bg-emerald-950/20"
+                    : credResult.http_status === 401
+                      ? "border-amber-400/60 bg-amber-50 dark:bg-amber-950/20"
+                      : "border-destructive/40 bg-destructive/5"
                 }`}
               >
-                <div className="font-medium flex items-center gap-2">
+                {/* T?tulo do resultado */}
+                <div className="font-semibold flex items-center gap-2 text-base">
                   {credResult.ok ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                  ) : credResult.http_status === 401 ? (
+                    <XCircle className="h-5 w-5 text-amber-600 shrink-0" />
                   ) : (
-                    <XCircle className="h-4 w-4 text-destructive" />
+                    <XCircle className="h-5 w-5 text-destructive shrink-0" />
                   )}
-                  {credResult.ok
-                    ? credResult.mensagem ?? "Credenciais v?lidas"
-                    : credResult.erro ?? "Falha na valida??o"}
+                  <span className={credResult.ok ? "text-emerald-800 dark:text-emerald-300" : credResult.http_status === 401 ? "text-amber-800 dark:text-amber-300" : "text-destructive"}>
+                    {credResult.ok
+                      ? "? Credenciais v?lidas — conex?o estabelecida!"
+                      : credResult.http_status === 401
+                        ? "? Client ID ou Client Secret incorretos"
+                        : credResult.http_status === 403
+                          ? "?? Conta sem permiss?o para usar esta API"
+                          : credResult.erro ?? "Falha na valida??o"}
+                  </span>
                 </div>
-                {credResult.http_status ? (
-                  <div className="text-xs text-muted-foreground">
-                    HTTP {credResult.http_status}
-                    {credResult.duracao_ms ? ` ? ${credResult.duracao_ms}ms` : ""}
-                  </div>
-                ) : null}
-                {credResult.expires_in && (
-                  <div className="text-xs text-muted-foreground">
-                    Token expira em {credResult.expires_in}s
+
+                {/* Mensagem amig?vel por c?digo de erro */}
+                {!credResult.ok && (
+                  <div className={`rounded-md p-3 text-sm ${credResult.http_status === 401 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200" : "bg-destructive/10 text-destructive"}`}>
+                    {credResult.http_status === 401 && (
+                      <div className="space-y-1">
+                        <p className="font-medium">O que fazer:</p>
+                        <ol className="list-decimal ml-4 space-y-1 text-xs">
+                          <li>Acesse o painel da Assertiva e copie o <strong>Client ID</strong> e <strong>Client Secret</strong> corretos</li>
+                          <li>Cole os valores nos campos acima e clique <strong>Validar agora</strong> novamente</li>
+                          <li>Certifique-se de copiar o valor completo sem espa?os extras</li>
+                        </ol>
+                      </div>
+                    )}
+                    {credResult.http_status === 403 && (
+                      <div className="space-y-1">
+                        <p className="font-medium">Sua conta n?o tem acesso liberado ? API.</p>
+                        <p className="text-xs">Entre em contato com a Assertiva solicitando ativa??o: <strong>atendimento@assertivasolucoes.com.br</strong></p>
+                      </div>
+                    )}
                   </div>
                 )}
-                {credResult.dica && !credResult.ok && (
-                  <div className="text-xs rounded border bg-background/60 p-2 text-foreground">
-                    ?? {ocultarAssertivaEmTextoUi(String(credResult.dica))}
+
+                {/* Token info (sucesso) */}
+                {credResult.ok && credResult.expires_in && (
+                  <div className="text-xs text-emerald-700 dark:text-emerald-400">
+                    Token v?lido por {credResult.expires_in} segundos · {credResult.duracao_ms}ms
                   </div>
                 )}
-                {credResult.detalhes ? (
+
+                {/* Dica t?cnica (colaps?vel) */}
+                {!credResult.ok && (credResult.dica || credResult.detalhes) && (
                   <details className="text-xs">
-                    <summary className="cursor-pointer select-none text-muted-foreground">
-                      Resposta do provedor
+                    <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">
+                      Ver detalhes t?cnicos
                     </summary>
-                    <pre className="mt-1 max-h-48 overflow-auto bg-muted/40 p-2 rounded">
+                    <div className="mt-2 space-y-2">
+                      {credResult.dica && (
+                        <p className="rounded bg-background/80 border p-2">
+                          {ocultarAssertivaEmTextoUi(String(credResult.dica))}
+                        </p>
+                      )}
+                      {credResult.detalhes && (
+                        <pre className="max-h-32 overflow-auto bg-muted/40 p-2 rounded">
 {sanitizarJsonTextoCliente(credResult.detalhes)}
-                    </pre>
+                        </pre>
+                      )}
+                    </div>
                   </details>
-                ) : null}
+                )}
                 {credResult.ok && !credSaved && (
                   <Button
                     className="w-full mt-2"
