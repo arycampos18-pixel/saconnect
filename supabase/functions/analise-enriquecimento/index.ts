@@ -1040,6 +1040,17 @@ Deno.serve(async (req: Request) => {
     const { _telefone_api_log: _omit, ...safeResult } = call.result;
 
     const pubOk = metaProvedorRespostaCliente(call.provedor, ultimoOauthEndpoint);
+    // Verifica se o resultado está vazio (nenhuma pessoa encontrada)
+    const temDados = Object.values(safeResult).some(v => v != null && v !== "" && !(Array.isArray(v) && v.length === 0));
+    if (!temDados) {
+      return jsonRes({
+        ok: true,
+        skipped: true,
+        motivo: `Nenhuma pessoa encontrada para este ${chave_busca === "cpf" ? "CPF" : "telefone"} na SA Connect Data.`,
+        chave_busca,
+      }, 200);
+    }
+
     return jsonRes({
       success: true,
       chave_busca,
@@ -1048,8 +1059,6 @@ Deno.serve(async (req: Request) => {
       campos_aplicados: camposAplicados,
       divergencia,
       dados: safeResult,
-      // Inclui raw para diagnóstico do mapeamento de campos
-      _raw_debug: call.raw,
     }, 200);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro desconhecido";

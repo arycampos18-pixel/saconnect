@@ -183,11 +183,11 @@ export function AssertivaBuscaDialog({
         } as BuscaResultado;
       }
 
-      // Sem dados (skipped ou vazio)
+      // Sem dados (nenhuma pessoa encontrada ou skipped)
       return {
-        ok: data?.success ?? false,
-        skipped: data?.skipped ?? !data?.success,
-        motivo: data?.skipped ? (data.motivo ?? "Nenhuma pessoa encontrada com esses dados.") : undefined,
+        ok: true,
+        skipped: true,
+        motivo: data?.motivo ?? "Nenhuma pessoa encontrada com esses dados na SA Connect Data.",
         dados: d,
         campos_aplicados: [],
       } as BuscaResultado;
