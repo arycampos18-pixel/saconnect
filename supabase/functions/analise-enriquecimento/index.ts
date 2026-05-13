@@ -127,7 +127,7 @@ function gerarDicaOAuth(http_status: number, erro?: string, raw?: unknown): stri
     return "Falha de rede ao acessar o provedor OAuth2. Tente novamente em instantes; se persistir, verifique a URL configurada.";
   }
   if (http_status === 404) {
-    return "Endpoint OAuth2 não encontrado. A URL deve ser apenas a raiz da API do SA Connect Data — o /oauth2/v3/token é adicionado automaticamente.";
+    return "Endpoint OAuth2 não encontrado. Use https://integracao.assertivasolucoes.com.br como URL base — o /v3/token é adicionado automaticamente.";
   }
   return null;
 }
@@ -222,7 +222,10 @@ async function obterTokenProvedor(): Promise<
   // Extraímos só o host e forçamos `api.assertivasolucoes.com.br` quando
   // o usuário colou a URL de documentação (`integracao...` ou `/v3/doc`).
   const host = resolveProvedorApiHost(base || null);
-  const tokenUrl = `https://${host}/oauth2/v3/token`;
+  // integracao.assertivasolucoes.com.br usa /v3/token (sem /oauth2/)
+  // api.assertivasolucoes.com.br usa /oauth2/v3/token
+  const tokenPath = host.startsWith("integracao.") ? "/v3/token" : "/oauth2/v3/token";
+  const tokenUrl = `https://${host}${tokenPath}`;
   // Exposto p/ logs/diagnóstico (último endpoint usado nesta instância)
   ultimoOauthEndpoint = tokenUrl;
   console.log("[assertiva] solicitando token em", tokenUrl);
@@ -613,7 +616,7 @@ Deno.serve(async (req: Request) => {
           ok: false, modo, erro: "Informe Client ID e Client Secret para validar.",
         }, 200);
       }
-      const tokenUrl = "https://api.assertivasolucoes.com.br/oauth2/v3/token";
+      const tokenUrl = "https://integracao.assertivasolucoes.com.br/v3/token";
       const started = Date.now();
       try {
         const ctrl = new AbortController();
