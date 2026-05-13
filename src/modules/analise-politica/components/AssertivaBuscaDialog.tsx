@@ -20,6 +20,7 @@ type BuscaResultado = {
   dados?: Record<string, any>;
   campos_aplicados?: string[];
   erro?: string;
+  errorMsg?: string;
   skipped?: boolean;
   motivo?: string;
 };
@@ -115,22 +116,31 @@ export function AssertivaBuscaDialog({
         "analise-enriquecimento",
         { body },
       );
-      if (error) {
-        // Tenta extrair mensagem do corpo da resposta da Edge Function
-        let msg = error.message ?? "Erro na consulta";
-        try {
-          const ctx = (error as any).context;
-          const parsed = typeof ctx?.json === "function"
-            ? await ctx.json()
-            : (typeof ctx === "object" ? ctx : null);
-          if (parsed?.error) msg = String(parsed.error);
-          else if (parsed?.message) msg = String(parsed.message);
-        } catch { /* usa msg padrão */ }
-        throw new Error(msg);
+
+      // Mesmo padrão do Testar com CPF/Telefone em AnaliseIntegracoes
+      const ctx = (error as any)?.context;
+      if (ctx) {
+        let parsed: any = null;
+        try { parsed = await ctx.json(); } catch {
+          try { parsed = { error: await ctx.text() }; } catch { /* ignore */ }
+        }
+        const msg = parsed?.error ?? parsed?.erro ?? (error as any)?.message ?? "Falha na consulta";
+        const r: BuscaResultado = {
+          ok: false,
+          errorMsg: msg,
+          dados: parsed,
+        };
+        return r;
+      }
+      if (error) throw new Error((error as any).message ?? "Erro na consulta");
+      if (data?.error || data?.erro) {
+        return { ok: false, errorMsg: data.error ?? data.erro, dados: data };
       }
       return data as BuscaResultado;
     },
     onSuccess: (data) => {
+      // Normaliza errorMsg → erro
+      if (data?.errorMsg && !data.erro) data.erro = data.errorMsg;
       setResultado(data);
       if (data?.ok && !data?.skipped) {
         const qtd = data.campos_aplicados?.length ?? 0;
