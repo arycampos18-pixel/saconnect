@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { formatPhoneBR, onlyDigits } from "@/shared/utils/phone";
+import { generateUUID } from "@/shared/utils/uuid";
 
 export type PesquisaTipo = "Intenção de Voto" | "Satisfação" | "Temas Prioritários";
 export type PesquisaStatus = "Rascunho" | "Ativa" | "Finalizada";
@@ -181,7 +182,7 @@ export const pesquisaService = {
     });
     if (ce) throw ce;
     if (jaVotou) throw new Error("Este telefone já respondeu a esta pesquisa.");
-    const sessao_id = crypto.randomUUID();
+    const sessao_id = generateUUID();
     const payload = respostas.map((r) => ({
       pesquisa_id: pesquisaId,
       pergunta_id: r.pergunta_id,

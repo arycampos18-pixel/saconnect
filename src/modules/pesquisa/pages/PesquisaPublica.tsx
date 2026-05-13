@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
+import { generateUUID } from "@/shared/utils/uuid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -305,7 +306,7 @@ export default function PesquisaPublica() {
     }
 
     try {
-      const sessaoId = crypto.randomUUID();
+      const sessaoId = generateUUID();
       const respostasArr = perguntas.map((p) => ({
         pergunta_id: p.id, resposta: respostas[p.id].trim(),
       }));

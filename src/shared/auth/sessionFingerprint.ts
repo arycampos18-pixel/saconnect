@@ -1,12 +1,14 @@
 // Gera um identificador único por aba de browser para representar a "sessão da app"
 // no servidor. Persistido em sessionStorage (some ao fechar a aba).
+import { generateUUID } from "@/shared/utils/uuid";
+
 const KEY = "sa-app-session-jti";
 
 export function getSessionJti(): string {
   try {
     const existing = sessionStorage.getItem(KEY);
     if (existing) return existing;
-    const fresh = `${crypto.randomUUID()}-${Date.now()}`;
+    const fresh = `${generateUUID()}-${Date.now()}`;
     sessionStorage.setItem(KEY, fresh);
     return fresh;
   } catch {

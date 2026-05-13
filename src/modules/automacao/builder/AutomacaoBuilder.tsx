@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from "react";
+import { generateUUID } from "@/shared/utils/uuid";
 import ReactFlow, {
   Background,
   Controls,
@@ -71,7 +72,7 @@ export default function AutomacaoBuilder({ nodes, edges, onNodesChange, onEdgesC
       y: e.clientY - bounds.top,
     });
     const newNode: Node = {
-      id: `${payload.kind}-${crypto.randomUUID().slice(0, 6)}`,
+      id: `${payload.kind}-${generateUUID().slice(0, 6)}`,
       type: payload.kind,
       position,
       data: payload.data,
