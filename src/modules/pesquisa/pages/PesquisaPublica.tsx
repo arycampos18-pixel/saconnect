@@ -26,6 +26,15 @@ export default function PesquisaPublica() {
     if (!slug) return;
     (async () => {
       try {
+        // Tenta via RPC pública (sem JWT) — funciona para anon
+        const { data: rpcData, error: rpcErr } = await (supabase as any)
+          .rpc("public_get_pesquisa_by_code", { _code: slug });
+        if (!rpcErr && rpcData?.encontrado) {
+          setPesquisa(rpcData.pesquisa);
+          setPerguntas(rpcData.perguntas ?? []);
+          return;
+        }
+        // Fallback para o service (utilizadores autenticados)
         const data = await pesquisaService.getBySlug(slug);
         if (!data) return;
         setPesquisa(data.pesquisa);
@@ -68,11 +77,23 @@ export default function PesquisaPublica() {
     }
     setSubmitting(true);
     try {
-      await pesquisaService.submeterRespostas(
-        pesquisa!.id,
-        perguntas.map((p) => ({ pergunta_id: p.id, resposta: respostas[p.id].trim() })),
-        { nome: nome.trim(), telefone: telefone.trim() }
+      const sessaoId = crypto.randomUUID();
+      const respostasArr = perguntas.map((p) => ({
+        pergunta_id: p.id,
+        resposta: respostas[p.id].trim(),
+      }));
+      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc(
+        "public_submit_pesquisa",
+        {
+          _pesquisa_id: pesquisa!.id,
+          _sessao_id:   sessaoId,
+          _nome:        nome.trim(),
+          _telefone:    telefone.trim(),
+          _respostas:   respostasArr,
+        }
       );
+      if (rpcErr) throw new Error(rpcErr.message);
+      if (rpcData?.error) throw new Error(rpcData.error);
       setDone(true);
     } catch (err: any) { toast.error(err.message ?? "Erro ao enviar."); }
     finally { setSubmitting(false); }

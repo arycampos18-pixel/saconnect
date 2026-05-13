@@ -17,9 +17,9 @@ export function CompartilharDialog({
 
   if (!pesquisa) return null;
 
-  const url = pesquisa.slug
-    ? `${window.location.origin}/p/${pesquisa.slug}`
-    : null;
+  // Usa o short_code se disponível (7 chars), senão usa o slug completo
+  const code = (pesquisa as any).short_code ?? pesquisa.slug;
+  const url = code ? `${window.location.origin}/p/${code}` : null;
 
   const copy = async () => {
     if (!url) return;
