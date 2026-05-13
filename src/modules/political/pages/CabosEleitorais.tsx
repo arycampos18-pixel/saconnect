@@ -15,9 +15,20 @@ import { useCompany } from "@/modules/settings/contexts/CompanyContext";
 
 export default function CabosEleitorais() {
   const qc = useQueryClient();
-  const { currentCompany } = useCompany();
-  const { data = [], isLoading } = useQuery({ queryKey: ["cabos"], queryFn: () => liderancasCabosService.listarCabos() });
-  const { data: liderancas = [] } = useQuery({ queryKey: ["liderancas"], queryFn: () => liderancasCabosService.listarLiderancas() });
+  const { currentCompany, loading: companyLoading } = useCompany();
+  const cid = currentCompany?.id ?? null;
+
+  const { data = [], isLoading, isError, error } = useQuery({
+    queryKey: ["cabos", cid],
+    queryFn: () => liderancasCabosService.listarCabos(cid),
+    enabled: !companyLoading,
+    retry: 1,
+  });
+  const { data: liderancas = [] } = useQuery({
+    queryKey: ["liderancas", cid],
+    queryFn: () => liderancasCabosService.listarLiderancas(cid),
+    enabled: !companyLoading,
+  });
 
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<Cabo | null>(null);
@@ -37,14 +48,14 @@ export default function CabosEleitorais() {
         toast.success("Cabo criado");
       }
       setOpen(false);
-      qc.invalidateQueries({ queryKey: ["cabos"] });
+      qc.invalidateQueries({ queryKey: ["cabos", cid] });
     } catch (e: any) { toast.error(e.message); }
   }
 
   async function remove(id: string) {
     if (!confirm("Remover este cabo?")) return;
     await liderancasCabosService.removerCabo(id);
-    qc.invalidateQueries({ queryKey: ["cabos"] });
+    qc.invalidateQueries({ queryKey: ["cabos", cid] });
     toast.success("Removido");
   }
 
@@ -63,10 +74,22 @@ export default function CabosEleitorais() {
       <Card>
         <CardHeader><CardTitle>Cabos cadastrados ({data.length})</CardTitle></CardHeader>
         <CardContent>
-          {isLoading ? (
+          {companyLoading || isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando…</p>
+          ) : !cid ? (
+            <p className="text-sm text-destructive">Nenhuma empresa ativa. Acesse Configurações → Empresas para vincular sua conta.</p>
+          ) : isError ? (
+            <div className="space-y-1">
+              <p className="text-sm text-destructive font-medium">Erro ao carregar cabos.</p>
+              <p className="text-xs text-muted-foreground font-mono break-all">
+                {(error as any)?.message ?? (error as any)?.details ?? String(error)}
+              </p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={() => qc.invalidateQueries({ queryKey: ["cabos", cid] })}>
+                Tentar novamente
+              </Button>
+            </div>
           ) : data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum cabo cadastrado.</p>
+            <p className="text-sm text-muted-foreground">Nenhum cabo cadastrado. Clique em <strong>Novo Cabo</strong> para começar.</p>
           ) : (
             <div className="space-y-2">
               {data.map((c) => (

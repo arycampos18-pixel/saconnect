@@ -5,8 +5,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { formatCPF, isValidCPF, onlyDigitsCPF } from "@/shared/utils/cpf";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+// Chamada direta às Edge Functions públicas — sem depender de sessão autenticada.
+// Envia apikey + Authorization: Bearer para que o gateway aceite mesmo sem JWT de utilizador.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+async function invokePublic<T = unknown>(fn: string, body: unknown): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) {
+      return { data: null, error: (json.error as string) ?? `HTTP ${res.status}` };
+    }
+    return { data: json as T, error: null };
+  } catch (e: unknown) {
+    return { data: null, error: (e as Error).message ?? "Falha de rede" };
+  }
+}
 
 function formatPhone(v: string) {
   const d = v.replace(/\D/g, "").slice(0, 11);
@@ -33,14 +58,14 @@ export default function CadastroPublico() {
     if (!t) return;
     setToken(t);
     setValidandoToken(true);
-    supabase.functions.invoke("auto-cadastro-validar", { body: { token: t } })
+    invokePublic<any>("auto-cadastro-validar", { token: t })
       .then(({ data, error }) => {
-        if (error) setTokenInfo({ valido: false, motivo: "Erro ao validar link" });
-        else {
-          const info = data as any;
-          setTokenInfo(info);
-          if (info?.valido && info?.telefone_destino) {
-            setTel(formatPhone(String(info.telefone_destino)));
+        if (error || !data) {
+          setTokenInfo({ valido: false, motivo: error ?? "Erro ao validar link" });
+        } else {
+          setTokenInfo(data);
+          if (data?.valido && data?.telefone_destino) {
+            setTel(formatPhone(String(data.telefone_destino)));
           }
         }
       })
@@ -57,18 +82,16 @@ export default function CadastroPublico() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("auto-cadastro-submit", {
-        body: {
-          token: token ?? undefined,
-          nome: nome.trim(),
-          telefone: tel.replace(/\D/g, ""),
-          cpf: cpfDigits || undefined,
-          email: email || undefined,
-          lgpd: true,
-        },
+      const { data, error } = await invokePublic<any>("auto-cadastro-submit", {
+        token: token ?? undefined,
+        nome: nome.trim(),
+        telefone: tel.replace(/\D/g, ""),
+        cpf: cpfDigits || undefined,
+        email: email || undefined,
+        lgpd: true,
       });
       if (error || (data as any)?.error) {
-        toast.error((data as any)?.error ?? error?.message ?? "Falha ao enviar cadastro");
+        toast.error((data as any)?.error ?? error ?? "Falha ao enviar cadastro");
         return;
       }
       setEnviado(true);

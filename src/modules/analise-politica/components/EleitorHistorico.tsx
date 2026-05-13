@@ -55,8 +55,8 @@ export function EleitorHistorico({ eleitorId }: { eleitorId: string }) {
         kind: "consulta",
         created_at: c.created_at,
         titulo: `Consulta · ${
-          (c.provedor ?? "").toLowerCase() === "assertiva" ? "SA Connect Data" : (c.provedor ?? "?")
-        } · ${c.endpoint ?? "—"}`,
+          (c.provedor ?? "").toLowerCase() === "assertiva" || (c.provedor ?? "").toLowerCase().includes("assertivasolucoes") ? "SA Connect" : (c.provedor ?? "?")
+        } · ${(c.endpoint ?? "—").replace(/api\.assertivasolucoes\.com\.br/gi, "SA Connect").replace(/assertivasolucoes/gi, "SA Connect")}`,
         status: c.status === "sucesso" ? "sucesso" : "erro",
         http_status: c.http_status,
         custo_centavos: c.custo_centavos,

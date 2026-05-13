@@ -6,3 +6,10 @@ verify_jwt = false
 
 [functions.webhook-zapi]
 verify_jwt = false
+
+# Cadastro público — acessado por eleitores não autenticados via link/QR Code
+[functions.auto-cadastro-validar]
+verify_jwt = false
+
+[functions.auto-cadastro-submit]
+verify_jwt = false

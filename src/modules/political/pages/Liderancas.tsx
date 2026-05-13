@@ -14,10 +14,13 @@ import { useCompany } from "@/modules/settings/contexts/CompanyContext";
 
 export default function Liderancas() {
   const qc = useQueryClient();
-  const { currentCompany } = useCompany();
-  const { data = [], isLoading } = useQuery({
-    queryKey: ["liderancas"],
-    queryFn: () => liderancasCabosService.listarLiderancas(),
+  const { currentCompany, loading: companyLoading } = useCompany();
+  const cid = currentCompany?.id ?? null;
+
+  const { data = [], isLoading, isError } = useQuery({
+    queryKey: ["liderancas", cid],
+    queryFn: () => liderancasCabosService.listarLiderancas(cid),
+    enabled: !companyLoading,
   });
 
   const [open, setOpen] = useState(false);
@@ -38,7 +41,7 @@ export default function Liderancas() {
         toast.success("Liderança criada");
       }
       setOpen(false);
-      qc.invalidateQueries({ queryKey: ["liderancas"] });
+      qc.invalidateQueries({ queryKey: ["liderancas", cid] });
     } catch (e: any) { toast.error(e.message); }
   }
 
@@ -46,7 +49,7 @@ export default function Liderancas() {
     if (!confirm("Remover esta liderança?")) return;
     try {
       await liderancasCabosService.removerLideranca(id);
-      qc.invalidateQueries({ queryKey: ["liderancas"] });
+      qc.invalidateQueries({ queryKey: ["liderancas", cid] });
       toast.success("Removida");
     } catch (e: any) { toast.error(e.message); }
   }
@@ -64,10 +67,14 @@ export default function Liderancas() {
       <Card>
         <CardHeader><CardTitle>Lideranças cadastradas ({data.length})</CardTitle></CardHeader>
         <CardContent>
-          {isLoading ? (
+          {companyLoading || isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando…</p>
+          ) : !cid ? (
+            <p className="text-sm text-destructive">Nenhuma empresa ativa. Acesse Configurações → Empresas para vincular sua conta.</p>
+          ) : isError ? (
+            <p className="text-sm text-destructive">Erro ao carregar lideranças. Verifique sua conexão e tente novamente.</p>
           ) : data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma liderança ainda.</p>
+            <p className="text-sm text-muted-foreground">Nenhuma liderança cadastrada. Clique em <strong>Nova Liderança</strong> para começar.</p>
           ) : (
             <div className="space-y-2">
               {data.map((l) => (

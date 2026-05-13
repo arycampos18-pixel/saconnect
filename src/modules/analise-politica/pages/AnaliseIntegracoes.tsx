@@ -81,11 +81,10 @@ async function corpoErroEdgeFunction(err: unknown): Promise<string | null> {
 function rotuloProvedorEnriquecimentoUi(provedor: unknown): string {
   const raw = (provedor ?? "").toString().trim();
   const p = raw.toLowerCase();
-  if (!p) return "SA Connect Data";
-  if (p === "assertiva" || p === "mock" || p.includes("assertivasolucoes") || p.includes("provedor-cadastral")) {
-    return "SA Connect Data";
+  if (!p) return "SA Connect";
+  if (p === "assertiva" || p === "mock" || p.includes("assertivasolucoes") || p.includes("provedor-cadastral") || p.includes("sa connect")) {
+    return "SA Connect";
   }
-  if (p === "sa connect data") return "SA Connect Data";
   return raw;
 }
 
@@ -93,7 +92,7 @@ function rotuloProvedorEnriquecimentoUi(provedor: unknown): string {
 function sanitizarJsonTextoCliente(obj: unknown): string {
   const walk = (v: unknown): unknown => {
     if (typeof v === "string") {
-      return /assertivasolucoes/i.test(v) ? v.replace(/assertivasolucoes/gi, "provedor-cadastral") : v;
+      return /assertivasolucoes/i.test(v) ? v.replace(/assertivasolucoes/gi, "SA Connect") : v;
     }
     if (v === null || typeof v !== "object") return v;
     if (Array.isArray(v)) return v.map(walk);
@@ -109,7 +108,7 @@ function sanitizarJsonTextoCliente(obj: unknown): string {
 }
 
 function ocultarAssertivaEmTextoUi(s: string): string {
-  return s.replace(/assertivasolucoes/gi, "provedor-cadastral");
+  return s.replace(/assertivasolucoes/gi, "SA Connect");
 }
 
 const docs: Record<string, { url: string; secret: string; comoObter: string }> = {

@@ -131,13 +131,13 @@ function metaProvedorRespostaCliente(provedorHost: string, oauthAbs: string | nu
   };
 }
 
-/** Qualquer string em JSON ao cliente: remove o identificador comercial do host (substring). */
+/** Qualquer string em JSON ao cliente: substitui hostname comercial por "SA Connect". */
 const RE_ASSERTIVA_SUBSTRING = /assertivasolucoes/gi;
 
 function sanitizarJsonCliente<T>(data: T): T {
   const walk = (v: unknown): unknown => {
     if (typeof v === "string") {
-      return RE_ASSERTIVA_SUBSTRING.test(v) ? v.replace(RE_ASSERTIVA_SUBSTRING, "provedor-cadastral") : v;
+      return RE_ASSERTIVA_SUBSTRING.test(v) ? v.replace(RE_ASSERTIVA_SUBSTRING, "SA Connect") : v;
     }
     if (v === null || v === undefined) return v;
     if (typeof v !== "object") return v;

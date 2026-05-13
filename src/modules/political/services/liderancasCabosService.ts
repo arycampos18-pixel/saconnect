@@ -46,12 +46,17 @@ const sb: any = supabase;
 
 export const liderancasCabosService = {
   // ---------- Lideranças ----------
-  async listarLiderancas(): Promise<Lideranca[]> {
-    const { data, error } = await sb
+  async listarLiderancas(companyId?: string | null): Promise<Lideranca[]> {
+    let q = sb
       .from("liderancas")
-      .select("id, company_id, user_id, nome, email, telefone, regiao, status, observacoes, created_at")
+      .select("*")
       .order("nome");
-    if (error) throw error;
+    if (companyId) q = q.eq("company_id", companyId);
+    const { data, error } = await q;
+    if (error) {
+      console.error("[listarLiderancas] erro:", error);
+      throw new Error(error.message ?? error.details ?? JSON.stringify(error));
+    }
     return data ?? [];
   },
   async criarLideranca(input: Partial<Lideranca>) {
@@ -81,12 +86,17 @@ export const liderancasCabosService = {
   },
 
   // ---------- Cabos ----------
-  async listarCabos(): Promise<Cabo[]> {
-    const { data, error } = await sb
+  async listarCabos(companyId?: string | null): Promise<Cabo[]> {
+    let q = sb
       .from("cabos_eleitorais")
-      .select("id, company_id, user_id, lideranca_id, nome, email, telefone, zona, rua, status, observacoes, created_at")
+      .select("*")
       .order("nome");
-    if (error) throw error;
+    if (companyId) q = q.eq("company_id", companyId);
+    const { data, error } = await q;
+    if (error) {
+      console.error("[listarCabos] erro:", error);
+      throw new Error(error.message ?? error.details ?? JSON.stringify(error));
+    }
     return data ?? [];
   },
   async criarCabo(input: Partial<Cabo>) {

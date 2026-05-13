@@ -44,13 +44,18 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   // Avisa o servidor qual empresa está ativa nesta sessão.
   // RLS RESTRICTIVE em tabelas com company_id valida contra esse valor.
-  const syncActiveCompanyServer = useCallback(async (companyId: string | null) => {
+  const syncActiveCompanyServer = useCallback(async (companyId: string | null): Promise<boolean> => {
     try {
       const sb: any = supabase;
-      await sb.rpc("set_active_company", { _company_id: companyId });
+      const { error } = await sb.rpc("set_active_company", { _company_id: companyId });
+      if (error) {
+        console.warn("set_active_company retornou erro:", error.message ?? error);
+        return false;
+      }
+      return true;
     } catch (err) {
-      // não bloqueia a UI; o pior caso é cair no default_company server-side
-      console.warn("set_active_company falhou", err);
+      console.warn("set_active_company falhou (rede):", err);
+      return false;
     }
   }, []);
 

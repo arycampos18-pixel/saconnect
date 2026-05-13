@@ -20,40 +20,54 @@ Deno.serve(async (req) => {
   const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  try {
-    const auth = req.headers.get("Authorization");
-    if (!auth) return new Response(JSON.stringify({ error: "Não autenticado" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+  const jsonErr = (msg: string, status = 400) =>
+    new Response(JSON.stringify({ error: msg }), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: auth } } });
-    const { data: u, error: ue } = await sb.auth.getUser();
-    if (ue || !u.user) return new Response(JSON.stringify({ error: "Sessão inválida" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
+  try {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader) return jsonErr("Não autenticado", 401);
+
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const userId = (() => {
+      try {
+        const part = (jwt.split(".")[1] ?? "").replace(/-/g, "+").replace(/_/g, "/");
+        const padded = part + "=".repeat((4 - part.length % 4) % 4);
+        const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+        const sub = payload.sub ?? payload.user_id;
+        return typeof sub === "string" && sub.length > 0 ? sub : null;
+      } catch { return null; }
+    })();
+    if (!userId) return jsonErr("Token inválido", 401);
+
+    // cliente com contexto do utilizador (para RLS e rpc)
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: authHeader } } });
 
     const body = await req.json().catch(() => ({}));
     const tipo = (body.tipo as string) ?? "link";
     if (!["qrcode", "whatsapp", "link"].includes(tipo)) {
-      return new Response(JSON.stringify({ error: "Tipo inválido" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+      return jsonErr("Tipo inválido");
     }
 
     // Telefone destino (quando o link é enviado por WhatsApp/SMS)
     const telDestinoRaw = (body.telefone_destino as string | undefined) ?? "";
     const telDestino = telDestinoRaw.replace(/\D/g, "");
     if (tipo === "whatsapp" && telDestino.length < 10) {
-      return new Response(JSON.stringify({ error: "Telefone destino inválido" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+      return jsonErr("Telefone destino inválido");
     }
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     // resolve company + lideranca/cabo do usuário
-    const { data: companyId } = await sb.rpc("user_default_company", { _user_id: u.user.id });
+    const { data: companyId } = await sb.rpc("user_default_company", { _user_id: userId });
 
     let liderancaId: string | null = body.lideranca_id ?? null;
     let caboId: string | null = body.cabo_id ?? null;
     if (!liderancaId) {
-      const { data: lid } = await admin.from("liderancas").select("id").eq("user_id", u.user.id).maybeSingle();
+      const { data: lid } = await admin.from("liderancas").select("id").eq("user_id", userId).maybeSingle();
       liderancaId = lid?.id ?? null;
     }
     if (!caboId) {
-      const { data: cab } = await admin.from("cabos_eleitorais").select("id,lideranca_id").eq("user_id", u.user.id).maybeSingle();
+      const { data: cab } = await admin.from("cabos_eleitorais").select("id,lideranca_id").eq("user_id", userId).maybeSingle();
       if (cab) {
         caboId = cab.id;
         if (!liderancaId) liderancaId = cab.lideranca_id ?? null;
@@ -72,7 +86,7 @@ Deno.serve(async (req) => {
         lideranca_id: liderancaId,
         cabo_id: caboId,
         company_id: companyId ?? null,
-        created_by: u.user.id,
+        created_by: userId,
         expira_em: expira,
         telefone_destino: telDestino || null,
       })

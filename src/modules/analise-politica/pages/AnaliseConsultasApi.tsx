@@ -14,13 +14,37 @@ import { LimiteProvedorCard } from "../components/LimiteProvedorCard";
 const fmtBRL = (centavos: number) =>
   (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const labelProvedor = (p?: string | null) =>
-  !p ? "—" : p.toLowerCase() === "assertiva" ? "SA Connect Data" : p;
+/** Mascara qualquer referência ao hostname do provedor externo. */
+const mascarar = (v?: string | null): string => {
+  if (!v) return "—";
+  return v
+    .replace(/api\.assertivasolucoes\.com\.br/gi, "SA Connect")
+    .replace(/assertivasolucoes\.com\.br/gi, "SA Connect")
+    .replace(/assertivasolucoes/gi, "SA Connect")
+    .replace(/provedor-cadastral/gi, "SA Connect");
+};
+
+const labelProvedor = (p?: string | null): string => {
+  if (!p) return "—";
+  const lc = p.toLowerCase();
+  if (
+    lc === "assertiva" ||
+    lc === "mock" ||
+    lc.includes("assertivasolucoes") ||
+    lc.includes("provedor-cadastral") ||
+    lc.includes("sa connect")
+  ) return "SA Connect";
+  return mascarar(p);
+};
+
+const sanitizarEndpoint = (ep?: string | null): string => mascarar(ep);
 
 export default function AnaliseConsultasApi() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["analise-consultas-api", "consumo"],
     queryFn: () => analiseService.listarConsultasApi(1000),
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   const [provedorFiltro, setProvedorFiltro] = useState<string>("todos");
@@ -72,7 +96,7 @@ export default function AnaliseConsultasApi() {
         [
           new Date(c.created_at).toLocaleString("pt-BR"),
           labelProvedor(c.provedor),
-          c.endpoint ?? "",
+          sanitizarEndpoint(c.endpoint),
           c.status,
           c.http_status ?? "",
           c.duracao_ms ?? "",
@@ -178,7 +202,7 @@ export default function AnaliseConsultasApi() {
                       {new Date(c.created_at).toLocaleString("pt-BR")}
                     </TableCell>
                     <TableCell className="text-xs">{labelProvedor(c.provedor)}</TableCell>
-                    <TableCell className="text-xs">{c.endpoint ?? "—"}</TableCell>
+                    <TableCell className="text-xs">{sanitizarEndpoint(c.endpoint)}</TableCell>
                     <TableCell>
                       <Badge variant={c.status === "sucesso" ? "default" : "destructive"}>
                         {c.status}{c.http_status ? ` · ${c.http_status}` : ""}
