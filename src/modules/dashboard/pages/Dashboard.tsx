@@ -154,7 +154,7 @@ function VisaoPolitico({
   const { hasPermission, isSuperAdmin } = useCompany();
   const metricCards = [
     { to: "/app/eleitores", title: "Total de Eleitores", value: metricas.total.toLocaleString("pt-BR"), icon: Users, variant: "primary" as const },
-    { to: "/app/captacao", title: "Cadastros Hoje", value: metricas.hoje.toString(), icon: UserPlus, variant: "success" as const },
+    { to: "/app/political/voters?cadastrados=hoje", title: "Cadastros Hoje", value: metricas.hoje.toString(), icon: UserPlus, variant: "success" as const },
     { to: "/app/cadastros", title: "Lideranças Ativas", value: ranking.length.toString(), icon: Layers, variant: "primary" as const },
     { to: "/app/relatorios", title: "Meta do Mês", value: `${pctMeta}%`, icon: Target, trend: `${metricas.total}/${totalMeta}`, variant: "success" as const },
   ].filter((card) => canAccessRoute(card.to, hasPermission, isSuperAdmin));

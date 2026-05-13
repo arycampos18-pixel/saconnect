@@ -65,7 +65,16 @@ export type Filtros = {
   tagId?: string;
   liderancaId?: string;
   caboId?: string;
+  /** ISO: eleitores com created_at >= este instante (ex.: início do dia local, alinhado à métrica “hoje”) */
+  criadosDesde?: string;
 };
+
+/** Início do dia atual no fuso local, em ISO (mesma base usada em metricas().hoje). */
+export function inicioDoDiaLocalISO(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
 
 export const eleitoresService = {
   async list(filtros: Filtros = {}): Promise<EleitorComRelacoes[]> {
@@ -82,6 +91,7 @@ export const eleitoresService = {
       query = query.eq("lideranca_id", filtros.liderancaId);
     if (filtros.caboId && filtros.caboId !== "todos")
       query = query.eq("cabo_eleitoral_id", filtros.caboId);
+    if (filtros.criadosDesde) query = query.gte("created_at", filtros.criadosDesde);
     if (filtros.search) {
       const s = filtros.search.replace(/[%_]/g, "");
       query = query.or(`nome.ilike.%${s}%,telefone.ilike.%${s}%,cpf.ilike.%${s}%`);
@@ -179,8 +189,7 @@ export const eleitoresService = {
   },
 
   async metricas() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const inicioHoje = inicioDoDiaLocalISO();
     const sevenAgo = new Date();
     sevenAgo.setDate(sevenAgo.getDate() - 6);
     sevenAgo.setHours(0, 0, 0, 0);
@@ -190,7 +199,7 @@ export const eleitoresService = {
       supabase
         .from("eleitores")
         .select("*", { count: "exact", head: true })
-        .gte("created_at", today.toISOString()),
+        .gte("created_at", inicioHoje),
       supabase
         .from("eleitores")
         .select("created_at")

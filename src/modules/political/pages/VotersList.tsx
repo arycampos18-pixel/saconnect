@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search, Filter, Download } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
 import { useUserRole } from "@/modules/auth/hooks/useUserRole";
-import { eleitoresService, type EleitorComRelacoes } from "@/modules/eleitores/services/eleitoresService";
+import {
+  eleitoresService,
+  inicioDoDiaLocalISO,
+  type EleitorComRelacoes,
+} from "@/modules/eleitores/services/eleitoresService";
 import { catalogosService } from "@/modules/eleitores/services/catalogosService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +26,9 @@ const sb: any = supabase;
 export default function VotersList() {
   const { user } = useAuth();
   const { role, isAdmin, loading: roleLoading } = useUserRole();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const filtroCadastrosHoje = searchParams.get("cadastrados") === "hoje";
 
   // Descobre vínculo do usuário (liderança ou cabo)
   const { data: vinculo, isLoading: vinculoLoading } = useQuery({
@@ -67,9 +75,10 @@ export default function VotersList() {
           return;
         }
         filtros.liderancaId = escopo.liderancaId;
-      } else if (escopo.tipo === "admin" && liderancaFiltro !== "todas") {
+      } else       if (escopo.tipo === "admin" && liderancaFiltro !== "todas") {
         filtros.liderancaId = liderancaFiltro;
       }
+      if (filtroCadastrosHoje) filtros.criadosDesde = inicioDoDiaLocalISO();
       const [els, bs, lids] = await Promise.all([
         eleitoresService.list(filtros),
         catalogosService.bairros(),
@@ -90,7 +99,15 @@ export default function VotersList() {
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [escopo?.tipo, (escopo as any)?.caboId, (escopo as any)?.liderancaId, search, bairro, liderancaFiltro]);
+  }, [
+    escopo?.tipo,
+    (escopo as any)?.caboId,
+    (escopo as any)?.liderancaId,
+    search,
+    bairro,
+    liderancaFiltro,
+    filtroCadastrosHoje,
+  ]);
 
   const titulo =
     escopo?.tipo === "admin"
@@ -145,6 +162,19 @@ export default function VotersList() {
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{titulo}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {eleitores.length} eleitor(es) {loading ? "carregando..." : "encontrado(s)"}
+            {filtroCadastrosHoje && !loading && (
+              <>
+                {" "}
+                <span className="text-foreground">· cadastrados hoje</span>
+                <button
+                  type="button"
+                  className="ml-2 text-primary underline-offset-4 hover:underline"
+                  onClick={() => navigate("/app/political/voters", { replace: true })}
+                >
+                  ver todos
+                </button>
+              </>
+            )}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={exportar} disabled={loading || !eleitores.length}>

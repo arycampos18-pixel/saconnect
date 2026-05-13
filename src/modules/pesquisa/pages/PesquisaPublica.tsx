@@ -124,7 +124,7 @@ const anonSb =
     ? (createClient(SUPABASE_URL, SUPABASE_KEY) as any)
     : (createClient("https://invalid.supabase.co", "invalid-anon-key") as any);
 
-type Etapa = "identificacao" | "codigo" | "pesquisa";
+type Etapa = "pesquisa" | "identificacao" | "codigo" | "envio";
 
 /** POST direto à Edge Function (evita falhas opacas do invoke; exige URL Supabase real, não o domínio do site). */
 async function postPublicEnviarOtp(body: { telefone: string; nome?: string }): Promise<{
@@ -207,8 +207,8 @@ export default function PesquisaPublica() {
   const [pesquisa, setPesquisa] = useState<Pesquisa | null>(null);
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
 
-  // Fluxo de verificação
-  const [etapa, setEtapa] = useState<Etapa>(() => semValidacao ? "pesquisa" : "identificacao");
+  // Fluxo: pesquisa → (OTP) identificação → código → envio | modo simples (?s=1): só pesquisa com WhatsApp no fim
+  const [etapa, setEtapa] = useState<Etapa>("pesquisa");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -281,39 +281,29 @@ export default function PesquisaPublica() {
     } finally { setEnviando(false); }
   };
 
-  // ── Etapa 2: Verificar OTP ─────────────────────────────────────────────────
-  const verificarOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otpId || codigo.replace(/\D/g, "").length !== 6) {
-      toast.error("Informe os 6 dígitos do código"); return;
-    }
-    setVerificando(true);
-    try {
-      const { data, error } = await anonSb.rpc("public_verificar_otp", {
-        _id: otpId,
-        _codigo: codigo.trim(),
-      });
-      if (error || !data?.ok) {
-        toast.error(data?.error ?? error?.message ?? "Código incorreto");
+  const continuarParaIdentificacao = () => {
+    for (const p of perguntas) {
+      if (!respostas[p.id]?.trim()) {
+        toast.error(`Responda: ${p.texto}`);
         return;
       }
-      setEtapa("pesquisa");
-      toast.success("WhatsApp verificado! Preencha a pesquisa.");
-    } catch (err: any) {
-      toast.error(err.message ?? "Erro ao verificar");
-    } finally { setVerificando(false); }
+    }
+    setEtapa("identificacao");
   };
 
-  // ── Etapa 3: Submeter pesquisa ─────────────────────────────────────────────
-  const enviarPesquisa = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /** Envio ao servidor (modo simples pelo form; após OTP em verificarOtp). */
+  const submeterRespostas = async (): Promise<boolean> => {
     for (const p of perguntas) {
-      if (!respostas[p.id]?.trim()) { toast.error(`Responda: ${p.texto}`); return; }
+      if (!respostas[p.id]?.trim()) {
+        toast.error(`Responda: ${p.texto}`);
+        return false;
+      }
     }
     if (semValidacao && telefone.replace(/\D/g, "").length < 10) {
-      toast.error("Informe um WhatsApp válido com DDD"); return;
+      toast.error("Informe um WhatsApp válido com DDD");
+      return false;
     }
-    setSubmitting(true);
+
     try {
       const sessaoId = crypto.randomUUID();
       const respostasArr = perguntas.map((p) => ({
@@ -330,9 +320,11 @@ export default function PesquisaPublica() {
         _respostas: respostasArr,
         _metadata: metadataRef.current ?? null,
       });
-      if (!rpcErr && rpcData?.ok) { setDone(true); return; }
+      if (!rpcErr && rpcData?.ok) {
+        setDone(true);
+        return true;
+      }
 
-      // Fallback inserção direta
       const { data: jaVotou } = await anonSb.rpc("pesquisa_ja_respondeu", {
         _pesquisa_id: pesquisa!.id, _telefone: tel,
       });
@@ -345,8 +337,50 @@ export default function PesquisaPublica() {
       const { error: insErr } = await anonSb.from("pesquisa_respostas").insert(payload);
       if (insErr) throw insErr;
       setDone(true);
-    } catch (err: any) { toast.error(err.message ?? "Erro ao enviar."); }
-    finally { setSubmitting(false); }
+      return true;
+    } catch (err: any) {
+      toast.error(err.message ?? "Erro ao enviar.");
+      return false;
+    }
+  };
+
+  const enviarPesquisa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await submeterRespostas();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Verificar OTP e em seguida enviar respostas ─────────────────────────────
+  const verificarOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpId || codigo.replace(/\D/g, "").length !== 6) {
+      toast.error("Informe os 6 dígitos do código"); return;
+    }
+    setVerificando(true);
+    try {
+      const { data, error } = await anonSb.rpc("public_verificar_otp", {
+        _id: otpId,
+        _codigo: codigo.trim(),
+      });
+      if (error || !data?.ok) {
+        toast.error(data?.error ?? error?.message ?? "Código incorreto");
+        return;
+      }
+      toast.success("WhatsApp verificado! Enviando suas respostas…");
+      setEtapa("envio");
+      setSubmitting(true);
+      const ok = await submeterRespostas();
+      if (!ok) setEtapa("codigo");
+    } catch (err: any) {
+      toast.error(err.message ?? "Erro ao verificar");
+    } finally {
+      setVerificando(false);
+      setSubmitting(false);
+    }
   };
 
   function toggleMulti(perguntaId: string, opcao: string) {
@@ -406,11 +440,179 @@ export default function PesquisaPublica() {
       <div className="mx-auto max-w-2xl">
         <Header />
 
-        {/* ── ETAPA 1: Identificação ────────────────────────────────────────── */}
+        {/* ── ETAPA 1: Perguntas da pesquisa ───────────────────────────────── */}
+        {etapa === "pesquisa" && (
+          <div className="rounded-xl border bg-card p-6 shadow-elegant-sm sm:p-8">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                1
+              </div>
+              <h1 className="text-xl font-bold text-foreground">{pesquisa.titulo}</h1>
+            </div>
+
+            {!semValidacao && (
+              <p className="mb-4 text-sm text-muted-foreground">
+                Responda às perguntas abaixo. Depois você informará seu WhatsApp e receberá um código para confirmar sua participação.
+              </p>
+            )}
+
+            {semValidacao ? (
+              <form onSubmit={enviarPesquisa} className="space-y-6">
+                {perguntas.map((p, idx) => (
+                  <div key={p.id} className="space-y-3">
+                    <Label className="text-base font-medium">
+                      {idx + 1}. {p.texto}
+                    </Label>
+                    {p.tipo === "aberta" ? (
+                      <Textarea
+                        value={respostas[p.id] ?? ""}
+                        onChange={(e) => setRespostas({ ...respostas, [p.id]: e.target.value })}
+                        maxLength={500} rows={3}
+                      />
+                    ) : p.tipo === "multipla_varias" ? (
+                      <div className="space-y-2">
+                        {(p.opcoes ?? []).map((op) => {
+                          const marcadas = (respostas[p.id] ?? "").split("|").filter(Boolean);
+                          return (
+                            <div key={op} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent/40">
+                              <Checkbox
+                                id={`${p.id}-${op}`}
+                                checked={marcadas.includes(op)}
+                                onCheckedChange={() => toggleMulti(p.id, op)}
+                              />
+                              <Label htmlFor={`${p.id}-${op}`} className="flex-1 cursor-pointer font-normal">{op}</Label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <RadioGroup
+                        value={respostas[p.id] ?? ""}
+                        onValueChange={(v) => setRespostas({ ...respostas, [p.id]: v })}
+                      >
+                        {(p.tipo === "sim_nao" ? ["Sim", "Não"] : (p.opcoes ?? [])).map((op) => (
+                          <div key={op} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent/40">
+                            <RadioGroupItem value={op} id={`${p.id}-${op}`} />
+                            <Label htmlFor={`${p.id}-${op}`} className="flex-1 cursor-pointer font-normal">{op}</Label>
+                          </div>
+                        ))}
+                      </RadioGroup>
+                    )}
+                  </div>
+                ))}
+
+                <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    Sua identificação
+                  </p>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="sf-nome">Nome (opcional)</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="sf-nome"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        placeholder="Como prefere ser chamado"
+                        className="pl-9 h-11"
+                        maxLength={100}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="sf-tel">WhatsApp (com DDD) *</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="sf-tel"
+                        value={telefone}
+                        onChange={(e) => setTelefone(formatPhoneBR(e.target.value))}
+                        placeholder="(67) 9 8765-4321"
+                        className="pl-9 h-11"
+                        inputMode="numeric"
+                        maxLength={16}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Shield className="h-3 w-3" />
+                      Usado apenas para identificar sua participação.
+                    </p>
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full h-11" size="lg" disabled={submitting}>
+                  {submitting
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando…</>
+                    : "Enviar respostas"}
+                </Button>
+              </form>
+            ) : (
+              <div className="space-y-6">
+                {perguntas.map((p, idx) => (
+                  <div key={p.id} className="space-y-3">
+                    <Label className="text-base font-medium">
+                      {idx + 1}. {p.texto}
+                    </Label>
+                    {p.tipo === "aberta" ? (
+                      <Textarea
+                        value={respostas[p.id] ?? ""}
+                        onChange={(e) => setRespostas({ ...respostas, [p.id]: e.target.value })}
+                        maxLength={500} rows={3}
+                      />
+                    ) : p.tipo === "multipla_varias" ? (
+                      <div className="space-y-2">
+                        {(p.opcoes ?? []).map((op) => {
+                          const marcadas = (respostas[p.id] ?? "").split("|").filter(Boolean);
+                          return (
+                            <div key={op} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent/40">
+                              <Checkbox
+                                id={`${p.id}-${op}`}
+                                checked={marcadas.includes(op)}
+                                onCheckedChange={() => toggleMulti(p.id, op)}
+                              />
+                              <Label htmlFor={`${p.id}-${op}`} className="flex-1 cursor-pointer font-normal">{op}</Label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <RadioGroup
+                        value={respostas[p.id] ?? ""}
+                        onValueChange={(v) => setRespostas({ ...respostas, [p.id]: v })}
+                      >
+                        {(p.tipo === "sim_nao" ? ["Sim", "Não"] : (p.opcoes ?? [])).map((op) => (
+                          <div key={op} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent/40">
+                            <RadioGroupItem value={op} id={`${p.id}-${op}`} />
+                            <Label htmlFor={`${p.id}-${op}`} className="flex-1 cursor-pointer font-normal">{op}</Label>
+                          </div>
+                        ))}
+                      </RadioGroup>
+                    )}
+                  </div>
+                ))}
+
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                  Na próxima etapa você informará o WhatsApp e receberá um código de verificação.
+                </p>
+
+                <Button type="button" className="w-full h-11" size="lg" onClick={continuarParaIdentificacao}>
+                  Continuar
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ETAPA 2: Identificação (WhatsApp) ─────────────────────────────── */}
         {etapa === "identificacao" && (
           <div className="rounded-xl border bg-card p-6 shadow-elegant-sm sm:p-8">
             <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">1</div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">2</div>
               <h1 className="text-xl font-bold text-foreground">{pesquisa.titulo}</h1>
             </div>
             <p className="mb-6 text-sm text-muted-foreground">
@@ -457,6 +659,15 @@ export default function PesquisaPublica() {
               </Button>
             </form>
 
+            <Button
+              type="button"
+              variant="ghost"
+              className="mt-3 w-full"
+              onClick={() => setEtapa("pesquisa")}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" /> Voltar às perguntas
+            </Button>
+
             <p className="mt-4 text-center text-xs text-muted-foreground">
               <Shield className="inline h-3 w-3 mr-1" />
               Seus dados são usados apenas para identificar sua participação.
@@ -464,11 +675,11 @@ export default function PesquisaPublica() {
           </div>
         )}
 
-        {/* ── ETAPA 2: Verificação de código ───────────────────────────────── */}
+        {/* ── ETAPA 3: Verificação de código ───────────────────────────────── */}
         {etapa === "codigo" && (
           <div className="rounded-xl border bg-card p-6 shadow-elegant-sm sm:p-8">
             <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">2</div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">3</div>
               <h2 className="text-xl font-bold text-foreground">Verificar WhatsApp</h2>
             </div>
 
@@ -500,19 +711,34 @@ export default function PesquisaPublica() {
                 <p className="text-xs text-muted-foreground">Digite os 6 dígitos recebidos no WhatsApp</p>
               </div>
 
-              <Button type="submit" className="w-full h-11" disabled={verificando || codigo.length !== 6}>
-                {verificando
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando…</>
-                  : <><CheckCircle2 className="mr-2 h-4 w-4" /> Confirmar e entrar</>}
+              <Button type="submit" className="w-full h-11" disabled={verificando || submitting || codigo.length !== 6}>
+                {verificando || submitting
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {submitting ? "Enviando respostas…" : "Verificando…"}</>
+                  : <><CheckCircle2 className="mr-2 h-4 w-4" /> Confirmar código e enviar</>}
               </Button>
 
               <Button
                 type="button"
                 variant="ghost"
                 className="w-full"
+                disabled={verificando || submitting}
                 onClick={() => { setEtapa("identificacao"); setCodigo(""); setOtpId(null); }}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" /> Alterar número
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                disabled={verificando || submitting}
+                onClick={() => {
+                  setEtapa("pesquisa");
+                  setCodigo("");
+                  setOtpId(null);
+                }}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar às perguntas
               </Button>
             </form>
 
@@ -521,7 +747,7 @@ export default function PesquisaPublica() {
                 type="button"
                 variant="outline"
                 className="w-full"
-                disabled={enviando}
+                disabled={enviando || submitting}
                 onClick={() => void enviarOtp()}
               >
                 {enviando ? (
@@ -537,122 +763,12 @@ export default function PesquisaPublica() {
           </div>
         )}
 
-        {/* ── ETAPA 3: Formulário da pesquisa ─────────────────────────────── */}
-        {etapa === "pesquisa" && (
-          <div className="rounded-xl border bg-card p-6 shadow-elegant-sm sm:p-8">
-            <div className="mb-2 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                {semValidacao ? "1" : "3"}
-              </div>
-              <h1 className="text-xl font-bold text-foreground">{pesquisa.titulo}</h1>
-            </div>
-
-            {/* Badge de verificação (só no modo com OTP) */}
-            {!semValidacao && (
-              <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span className="text-xs text-emerald-700">
-                  WhatsApp verificado{nome.trim() ? <> — <strong>{nome.trim()}</strong></> : null} — {telMascarado}
-                </span>
-              </div>
-            )}
-
-            <form onSubmit={enviarPesquisa} className="space-y-6">
-              {perguntas.map((p, idx) => (
-                <div key={p.id} className="space-y-3">
-                  <Label className="text-base font-medium">
-                    {idx + 1}. {p.texto}
-                  </Label>
-                  {p.tipo === "aberta" ? (
-                    <Textarea
-                      value={respostas[p.id] ?? ""}
-                      onChange={(e) => setRespostas({ ...respostas, [p.id]: e.target.value })}
-                      maxLength={500} rows={3}
-                    />
-                  ) : p.tipo === "multipla_varias" ? (
-                    <div className="space-y-2">
-                      {(p.opcoes ?? []).map((op) => {
-                        const marcadas = (respostas[p.id] ?? "").split("|").filter(Boolean);
-                        return (
-                          <div key={op} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent/40">
-                            <Checkbox
-                              id={`${p.id}-${op}`}
-                              checked={marcadas.includes(op)}
-                              onCheckedChange={() => toggleMulti(p.id, op)}
-                            />
-                            <Label htmlFor={`${p.id}-${op}`} className="flex-1 cursor-pointer font-normal">{op}</Label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <RadioGroup
-                      value={respostas[p.id] ?? ""}
-                      onValueChange={(v) => setRespostas({ ...respostas, [p.id]: v })}
-                    >
-                      {(p.tipo === "sim_nao" ? ["Sim", "Não"] : (p.opcoes ?? [])).map((op) => (
-                        <div key={op} className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent/40">
-                          <RadioGroupItem value={op} id={`${p.id}-${op}`} />
-                          <Label htmlFor={`${p.id}-${op}`} className="flex-1 cursor-pointer font-normal">{op}</Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
-                  )}
-                </div>
-              ))}
-
-              {/* Identificação no final — apenas modo sem validação */}
-              {semValidacao && (
-                <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    Sua identificação
-                  </p>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="sf-nome">Nome (opcional)</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="sf-nome"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        placeholder="Como prefere ser chamado"
-                        className="pl-9 h-11"
-                        maxLength={100}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="sf-tel">WhatsApp (com DDD) *</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="sf-tel"
-                        value={telefone}
-                        onChange={(e) => setTelefone(formatPhoneBR(e.target.value))}
-                        placeholder="(67) 9 8765-4321"
-                        className="pl-9 h-11"
-                        inputMode="numeric"
-                        maxLength={16}
-                        required
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Shield className="h-3 w-3" />
-                      Usado apenas para identificar sua participação.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <Button type="submit" className="w-full h-11" size="lg" disabled={submitting}>
-                {submitting
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando…</>
-                  : "Enviar respostas"}
-              </Button>
-            </form>
+        {/* ── ETAPA 4: envio das respostas após OTP (tela de espera) ────────── */}
+        {etapa === "envio" && (
+          <div className="rounded-xl border bg-card p-10 text-center shadow-elegant-sm sm:p-12">
+            <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-primary" />
+            <p className="text-lg font-semibold text-foreground">Enviando suas respostas…</p>
+            <p className="mt-2 text-sm text-muted-foreground">Aguarde um instante.</p>
           </div>
         )}
       </div>
