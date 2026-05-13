@@ -162,7 +162,9 @@ if ($PullDeploy) {
   }
   Write-Host "Pull + build no servidor ($SshTarget)..." -ForegroundColor Cyan
   $utf8p = [System.Text.UTF8Encoding]::new($false)
+  # Normalizar LF e remover \r residual (evita no servidor: bash: $'\r': command not found)
   $pullText = [System.IO.File]::ReadAllText($PullDeployLocal, $utf8p) -replace "`r`n", "`n" -replace "`r", "`n"
+  $pullText = $pullText.TrimEnd() + "`n"
   $pullText | & ssh @KeyArgs $SshTarget "bash -s"
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   Write-Host "Pronto (pull + build)." -ForegroundColor Green
@@ -174,6 +176,7 @@ $utf8 = [System.Text.UTF8Encoding]::new($false)
 $bootstrapText = [System.IO.File]::ReadAllText($BootstrapLocal, $utf8)
 # CRLF quebra "set -o pipefail" no bash (vira "pipefail^M" -> invalid option)
 $bootstrapText = $bootstrapText -replace "`r`n", "`n" -replace "`r", "`n"
+$bootstrapText = $bootstrapText.TrimEnd() + "`n"
 $bootstrapText | & ssh @KeyArgs $SshTarget "bash -s"
 if ($LASTEXITCODE -ne 0) {
   if ($LASTEXITCODE -eq 2) {

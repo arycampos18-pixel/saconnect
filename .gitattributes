@@ -1,0 +1,3 @@
+# Evita CRLF em scripts executados no Linux (SSH / VPS) — sem isto aparece:
+#   bash: line N: $'\r': command not found
+*.sh text eol=lf
