@@ -14,6 +14,7 @@ import { MessageCircle, CheckCircle2, Sparkles, Search, Pencil, Vote, Loader2, X
 import { supabase } from "@/integrations/supabase/client";
 import { analiseService } from "../services/analiseService";
 import { NovoEleitorMenu } from "@/modules/eleitores/components/NovoEleitorMenu";
+import { AssertivaBuscaDialog } from "../components/AssertivaBuscaDialog";
 import { WhatsAppValidacaoDialog } from "../components/WhatsAppValidacaoDialog";
 import { EleitorDetalheDialog } from "../components/EleitorDetalheDialog";
 import { EleitorEditDialog } from "../components/EleitorEditDialog";
@@ -23,6 +24,7 @@ const sb: any = supabase;
 export default function AnaliseEleitores() {
   const [validar, setValidar] = useState<{ id: string; nome: string; telefone?: string | null; auto?: boolean } | null>(null);
   const [enriquecendoId, setEnriquecendoId] = useState<string | null>(null);
+  const [buscandoEleitor, setBuscandoEleitor] = useState<{ id: string; nome: string } | null>(null);
   const [tseId, setTseId] = useState<string | null>(null);
   // mapa de estado visual por eleitor: "ok" | "erro" | null
   const [tseResultado, setTseResultado] = useState<Record<string, "ok" | "erro">>({});
@@ -280,10 +282,9 @@ export default function AnaliseEleitores() {
                           </Button>
                         )}
                         <Button size="sm" variant="outline"
-                          disabled={enriquecendoId === e.id}
-                          onClick={() => enriquecer.mutate(e.id)}>
+                          onClick={() => setBuscandoEleitor({ id: e.id, nome: e.nome })}>
                           <Sparkles className="h-3 w-3 mr-1" />
-                          {enriquecendoId === e.id ? "…" : "Enriquecer"}
+                          Enriquecer
                         </Button>
                         {(() => {
                           const loading = tseId === e.id;
@@ -351,6 +352,16 @@ export default function AnaliseEleitores() {
         open={!!editar}
         onOpenChange={(v) => !v && setEditar(null)}
       />
+
+      {buscandoEleitor && (
+        <AssertivaBuscaDialog
+          eleitorId={buscandoEleitor.id}
+          eleitorNome={buscandoEleitor.nome}
+          open={!!buscandoEleitor}
+          onOpenChange={(v) => !v && setBuscandoEleitor(null)}
+          onSuccess={() => qc.invalidateQueries({ queryKey: ["analise-eleitores"] })}
+        />
+      )}
     </PageShell>
   );
 }
