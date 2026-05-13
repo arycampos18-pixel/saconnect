@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
+import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,79 @@ function resolvePublicOtpPostUrl(): string {
     /* ignore */
   }
   return raw;
+}
+
+// ── Coleta de metadados do browser ────────────────────────────────────────────
+type SessaoMetadata = {
+  url?: string;
+  origem?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  navegador?: string;
+  idioma?: string;
+  plataforma?: string;
+  timezone?: string;
+  touch?: boolean;
+  online?: boolean;
+  cookies?: boolean;
+  memoria?: number | null;
+  cpu?: number | null;
+  larguraTela?: number;
+  alturaTela?: number;
+  profundidadeCor?: number;
+  fingerprint_id?: string;
+  localizacao?: { latitude: number; longitude: number; precisao: number } | null;
+  dataHora?: string;
+};
+
+async function coletarMetadados(): Promise<SessaoMetadata> {
+  const params = new URLSearchParams(window.location.search);
+  const base: SessaoMetadata = {
+    url: window.location.href,
+    origem: document.referrer || undefined,
+    utm_source: params.get("utm_source") ?? undefined,
+    utm_medium: params.get("utm_medium") ?? undefined,
+    utm_campaign: params.get("utm_campaign") ?? undefined,
+    navegador: navigator.userAgent,
+    idioma: navigator.language,
+    plataforma: navigator.platform,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    touch: "ontouchstart" in window,
+    online: navigator.onLine,
+    cookies: navigator.cookieEnabled,
+    memoria: (navigator as any).deviceMemory ?? null,
+    cpu: navigator.hardwareConcurrency ?? null,
+    larguraTela: window.screen.width,
+    alturaTela: window.screen.height,
+    profundidadeCor: window.screen.colorDepth,
+    dataHora: new Date().toISOString(),
+    localizacao: null,
+  };
+
+  try {
+    const fp = await FingerprintJS.load();
+    const result = await fp.get();
+    base.fingerprint_id = result.visitorId;
+  } catch {
+    /* silencioso */
+  }
+
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(base); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        ...base,
+        localizacao: {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          precisao: pos.coords.accuracy,
+        },
+      }),
+      () => resolve(base),
+      { timeout: 6000 },
+    );
+  });
 }
 
 // Cliente anon — sem JWT, contorna RESTRICTIVE policy tenant_active_company_guard
@@ -118,6 +192,15 @@ async function postPublicEnviarOtp(body: { telefone: string; nome?: string }): P
 
 export default function PesquisaPublica() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  /** ?s=1 → modo simples: sem verificação OTP, vai direto ao formulário */
+  const semValidacao = searchParams.get("s") === "1";
+
+  // Metadados coletados assim que o componente monta (em background)
+  const metadataRef = useRef<SessaoMetadata | null>(null);
+  useEffect(() => {
+    coletarMetadados().then((m) => { metadataRef.current = m; });
+  }, []);
 
   // Estado da pesquisa
   const [loading, setLoading] = useState(true);
@@ -125,7 +208,7 @@ export default function PesquisaPublica() {
   const [perguntas, setPerguntas] = useState<Pergunta[]>([]);
 
   // Fluxo de verificação
-  const [etapa, setEtapa] = useState<Etapa>("identificacao");
+  const [etapa, setEtapa] = useState<Etapa>(() => semValidacao ? "pesquisa" : "identificacao");
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -227,6 +310,9 @@ export default function PesquisaPublica() {
     for (const p of perguntas) {
       if (!respostas[p.id]?.trim()) { toast.error(`Responda: ${p.texto}`); return; }
     }
+    if (semValidacao && telefone.replace(/\D/g, "").length < 10) {
+      toast.error("Informe um WhatsApp válido com DDD"); return;
+    }
     setSubmitting(true);
     try {
       const sessaoId = crypto.randomUUID();
@@ -242,6 +328,7 @@ export default function PesquisaPublica() {
         _nome: nomeParticipante,
         _telefone: tel,
         _respostas: respostasArr,
+        _metadata: metadataRef.current ?? null,
       });
       if (!rpcErr && rpcData?.ok) { setDone(true); return; }
 
@@ -454,15 +541,21 @@ export default function PesquisaPublica() {
         {etapa === "pesquisa" && (
           <div className="rounded-xl border bg-card p-6 shadow-elegant-sm sm:p-8">
             <div className="mb-2 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">3</div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                {semValidacao ? "1" : "3"}
+              </div>
               <h1 className="text-xl font-bold text-foreground">{pesquisa.titulo}</h1>
             </div>
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-              <span className="text-xs text-emerald-700">
-                WhatsApp verificado{nome.trim() ? <> — <strong>{nome.trim()}</strong></> : null} — {telMascarado}
-              </span>
-            </div>
+
+            {/* Badge de verificação (só no modo com OTP) */}
+            {!semValidacao && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="text-xs text-emerald-700">
+                  WhatsApp verificado{nome.trim() ? <> — <strong>{nome.trim()}</strong></> : null} — {telMascarado}
+                </span>
+              </div>
+            )}
 
             <form onSubmit={enviarPesquisa} className="space-y-6">
               {perguntas.map((p, idx) => (
@@ -507,6 +600,52 @@ export default function PesquisaPublica() {
                   )}
                 </div>
               ))}
+
+              {/* Identificação no final — apenas modo sem validação */}
+              {semValidacao && (
+                <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    Sua identificação
+                  </p>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="sf-nome">Nome (opcional)</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="sf-nome"
+                        value={nome}
+                        onChange={(e) => setNome(e.target.value)}
+                        placeholder="Como prefere ser chamado"
+                        className="pl-9 h-11"
+                        maxLength={100}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="sf-tel">WhatsApp (com DDD) *</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                      <Input
+                        id="sf-tel"
+                        value={telefone}
+                        onChange={(e) => setTelefone(formatPhoneBR(e.target.value))}
+                        placeholder="(67) 9 8765-4321"
+                        className="pl-9 h-11"
+                        inputMode="numeric"
+                        maxLength={16}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Shield className="h-3 w-3" />
+                      Usado apenas para identificar sua participação.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <Button type="submit" className="w-full h-11" size="lg" disabled={submitting}>
                 {submitting

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { Copy, Check, Download, MessageCircle, Loader2, Send, Plus, X } from "lucide-react";
+import { Copy, Check, Download, MessageCircle, Loader2, Send, Plus, X, Shield, ShieldOff } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -19,23 +19,21 @@ function formatPhone(v: string) {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
-export function CompartilharDialog({
-  pesquisa, open, onOpenChange,
-}: { pesquisa: Pesquisa | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+type Modo = "validado" | "simples";
+
+function LinkBlock({
+  url,
+  qrLabel,
+  slug,
+}: {
+  url: string;
+  qrLabel: string;
+  slug: string;
+}) {
   const [copied, setCopied] = useState(false);
-  const [waOpen, setWaOpen] = useState(false);
-  const [phones, setPhones] = useState([""]);
-  const [sending, setSending] = useState(false);
-  const [results, setResults] = useState<{ tel: string; ok: boolean; msg: string }[]>([]);
   const qrRef = useRef<HTMLDivElement>(null);
 
-  if (!pesquisa) return null;
-
-  const code = (pesquisa as any).short_code ?? pesquisa.slug;
-  const url = code ? `${window.location.origin}/p/${code}` : null;
-
   const copy = async () => {
-    if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -58,10 +56,61 @@ export function CompartilharDialog({
     if (!canvas) { toast.error("QR Code ainda não carregou"); return; }
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
-    a.download = `qrcode-${(pesquisa as any).short_code ?? pesquisa.slug ?? "pesquisa"}.png`;
+    a.download = `qrcode-${slug}-${qrLabel}.png`;
     a.click();
     toast.success("QR Code baixado!");
   };
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div ref={qrRef} className="rounded-xl border-2 border-border bg-white p-4 shadow-sm">
+        <QRCodeCanvas value={url} size={180} fgColor="#1E3A8A" bgColor="#FFFFFF" includeMargin level="M" />
+      </div>
+
+      <div className="flex w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 truncate text-sm font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800 break-all"
+        >
+          {url}
+        </a>
+        <button
+          onClick={copy}
+          title="Copiar link"
+          className={`shrink-0 rounded-md p-1.5 transition-colors ${
+            copied
+              ? "bg-emerald-100 text-emerald-700"
+              : "hover:bg-accent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <Button variant="outline" size="sm" className="w-full" onClick={baixarQR}>
+        <Download className="h-4 w-4 mr-1.5" /> Baixar QR Code
+      </Button>
+    </div>
+  );
+}
+
+export function CompartilharDialog({
+  pesquisa, open, onOpenChange,
+}: { pesquisa: Pesquisa | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const [modo, setModo] = useState<Modo>("validado");
+  const [waOpen, setWaOpen] = useState(false);
+  const [phones, setPhones] = useState([""]);
+  const [sending, setSending] = useState(false);
+  const [results, setResults] = useState<{ tel: string; ok: boolean; msg: string }[]>([]);
+
+  if (!pesquisa) return null;
+
+  const code = (pesquisa as any).short_code ?? pesquisa.slug;
+  const urlValidado = code ? `${window.location.origin}/p/${code}` : null;
+  const urlSimples = code ? `${window.location.origin}/p/${code}?s=1` : null;
+  const urlAtual = modo === "validado" ? urlValidado : urlSimples;
 
   // ── Envio via Z-API ─────────────────────────────────────────────────────────
   const addPhone = () => setPhones((p) => [...p, ""]);
@@ -70,13 +119,14 @@ export function CompartilharDialog({
     setPhones((p) => p.map((x, idx) => (idx === i ? formatPhone(v) : x)));
 
   const enviarViaZapi = async () => {
-    if (!url) return;
+    if (!urlAtual) return;
     const validos = phones.map((p) => p.replace(/\D/g, "")).filter((p) => p.length >= 10);
     if (!validos.length) { toast.error("Informe ao menos um número válido"); return; }
     setSending(true);
     setResults([]);
-    const curto = await encurtarUrl(url);
-    const msg = `Olá! 👋\n\nResponda nossa pesquisa "${pesquisa.titulo}" clicando no link abaixo:\n${curto}`;
+    const curto = await encurtarUrl(urlAtual);
+    const modoLabel = modo === "validado" ? "com verificação de WhatsApp" : "acesso direto";
+    const msg = `Olá! 👋\n\nResponda nossa pesquisa "${pesquisa.titulo}" (${modoLabel}):\n${curto}`;
     const res: typeof results = [];
     for (const tel of validos) {
       try {
@@ -108,51 +158,64 @@ export function CompartilharDialog({
           <DialogHeader>
             <DialogTitle>Compartilhar pesquisa</DialogTitle>
             <DialogDescription>
-              Compartilhe este link ou QR Code para coletar respostas.
+              Escolha o modo e compartilhe o link ou QR Code.
             </DialogDescription>
           </DialogHeader>
 
-          {!url ? (
+          {!urlValidado ? (
             <p className="text-sm text-destructive py-4 text-center">
               Esta pesquisa não possui um link público. Salve a pesquisa novamente.
             </p>
           ) : (
-            <div className="flex flex-col items-center gap-4 py-2">
+            <div className="flex flex-col gap-4 py-1">
 
-              {/* QR Code */}
-              <div ref={qrRef} className="rounded-xl border-2 border-border bg-white p-4 shadow-sm">
-                <QRCodeCanvas value={url} size={200} fgColor="#1E3A8A" bgColor="#FFFFFF" includeMargin level="M" />
-              </div>
-
-              {/* Link azul clicável + copiar */}
-              <div className="flex w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 truncate text-sm font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800 break-all"
-                >
-                  {url}
-                </a>
+              {/* Toggle de modo */}
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/30 p-1">
                 <button
-                  onClick={copy}
-                  title="Copiar link"
-                  className={`shrink-0 rounded-md p-1.5 transition-colors ${
-                    copied
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                  onClick={() => setModo("validado")}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
+                    modo === "validado"
+                      ? "bg-background text-primary shadow-sm border border-border"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  <Shield className="h-3.5 w-3.5" />
+                  Com verificação WhatsApp
+                </button>
+                <button
+                  onClick={() => setModo("simples")}
+                  className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
+                    modo === "simples"
+                      ? "bg-background text-primary shadow-sm border border-border"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <ShieldOff className="h-3.5 w-3.5" />
+                  Acesso direto
                 </button>
               </div>
 
-              {/* Ações */}
-              <Button variant="outline" size="sm" className="w-full" onClick={baixarQR}>
-                <Download className="h-4 w-4 mr-1.5" /> Baixar QR Code
-              </Button>
+              {/* Descrição do modo */}
+              {modo === "validado" ? (
+                <p className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-800">
+                  <Shield className="inline h-3.5 w-3.5 mr-1" />
+                  O participante confirma o WhatsApp via código antes de responder. Evita respostas duplicadas.
+                </p>
+              ) : (
+                <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                  <ShieldOff className="inline h-3.5 w-3.5 mr-1" />
+                  O participante vai direto ao formulário. Nome é opcional e WhatsApp é obrigatório apenas no final.
+                </p>
+              )}
 
-              {/* WhatsApp via Z-API */}
+              {/* QR + Link do modo atual */}
+              <LinkBlock
+                url={modo === "validado" ? urlValidado : urlSimples!}
+                qrLabel={modo === "validado" ? "verificado" : "simples"}
+                slug={(pesquisa as any).short_code ?? pesquisa.slug ?? "pesquisa"}
+              />
+
+              {/* Enviar via WhatsApp */}
               <Button
                 className="w-full bg-[#25D366] hover:bg-[#1ebe57] text-white"
                 size="sm"
@@ -222,7 +285,6 @@ export function CompartilharDialog({
               <Plus className="h-3.5 w-3.5 mr-1" /> Adicionar número
             </Button>
 
-            {/* Resultados do envio */}
             {results.length > 0 && (
               <div className="space-y-1 rounded-lg border bg-muted/30 p-3">
                 {results.map((r, i) => (

@@ -49,11 +49,31 @@ export const cadastrosService = {
     return (data ?? []) as Lideranca[];
   },
 
+  async verificarTelefoneLiderancaDuplicado(telefone: string, ignorarId?: string): Promise<boolean> {
+    const tel = telefone.replace(/\D/g, "");
+    if (!tel) return false;
+    let q = (supabase as any)
+      .from("liderancas")
+      .select("id", { count: "exact", head: true })
+      .ilike("telefone", tel);
+    if (ignorarId) q = q.neq("id", ignorarId);
+    const { count } = await q;
+    return (count ?? 0) > 0;
+  },
+
   async criarLideranca(input: Partial<Lideranca>) {
+    // Bloqueia telefone duplicado dentro da mesma empresa (RLS garante o escopo)
+    if (input.telefone?.trim()) {
+      const duplicado = await cadastrosService.verificarTelefoneLiderancaDuplicado(input.telefone);
+      if (duplicado) {
+        throw new Error("Este telefone já está cadastrado em outra liderança.");
+      }
+    }
+
     const { data: auth } = await supabase.auth.getUser();
     const payload: any = {
       nome: input.nome!,
-      telefone: input.telefone ?? null,
+      telefone: input.telefone ? input.telefone.replace(/\D/g, "") : null,
       cidade: input.cidade ?? null,
       meta: input.meta ?? 100,
       ativo: input.ativo ?? true,
@@ -66,7 +86,10 @@ export const cadastrosService = {
       .insert(payload)
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") throw new Error("Este telefone já está cadastrado em outra liderança.");
+      throw error;
+    }
     return data;
   },
 

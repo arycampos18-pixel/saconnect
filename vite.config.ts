@@ -13,21 +13,44 @@ export default defineConfig(({ mode }) => {
       env.VITE_SUPABASE_PUBLISHABLE_KEY ||
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0d2Rnbmt1cnRhbGNsc2d4Zm92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2ODEzOTEsImV4cCI6MjA5MzI1NzM5MX0.8gJkKBMuSBWamNE27uXF3k1ZcQ98dO18o6eQlBdvXTw",
     VITE_SUPABASE_PROJECT_ID: env.VITE_SUPABASE_PROJECT_ID || "ktwdgnkurtalclsgxfov",
+    // Proxy path para OTP da pesquisa pública. Vazio = chama Supabase direto (pode falhar por CORS/rede).
+    VITE_PUBLIC_OTP_SEND_URL: env.VITE_PUBLIC_OTP_SEND_URL || "",
   };
 
+  const supabaseOrigin = (publicEnv.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+
   return {
-    define: Object.fromEntries(
-      Object.entries(publicEnv).map(([key, value]) => [
-        `import.meta.env.${key}`,
-        JSON.stringify(value),
-      ]),
-    ),
+    define: {
+      // Variáveis de ambiente públicas (Supabase + proxy OTP)
+      ...Object.fromEntries(
+        Object.entries(publicEnv).map(([key, value]) => [
+          `import.meta.env.${key}`,
+          JSON.stringify(value),
+        ]),
+      ),
+      // Timestamp do build — muda a cada deploy; usado pelo buildGuard para
+      // detectar novo deploy e forçar nova sessão no browser.
+      __BUILD_EPOCH__: JSON.stringify(Date.now()),
+    },
     server: {
       host: "::",
       port: 8080,
       hmr: {
         overlay: false,
       },
+      // Com VITE_PUBLIC_OTP_SEND_URL=/api/public-enviar-otp no .env, o dev server
+      // encaminha para a Edge Function (evita "Failed to fetch" a *.supabase.co).
+      proxy:
+        supabaseOrigin.startsWith("http")
+          ? {
+              "/api/public-enviar-otp": {
+                target: supabaseOrigin,
+                changeOrigin: true,
+                secure: true,
+                rewrite: () => "/functions/v1/public-enviar-otp",
+              },
+            }
+          : undefined,
     },
     plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
     resolve: {

@@ -60,8 +60,24 @@ export const liderancasCabosService = {
     return data ?? [];
   },
   async criarLideranca(input: Partial<Lideranca>) {
-    const { data, error } = await sb.from("liderancas").insert(input).select().single();
-    if (error) throw error;
+    // Bloqueia telefone duplicado (RLS restringe ao escopo da empresa)
+    const tel = (input.telefone ?? "").replace(/\D/g, "");
+    if (tel) {
+      const { count } = await sb
+        .from("liderancas")
+        .select("id", { count: "exact", head: true })
+        .ilike("telefone", tel);
+      if ((count ?? 0) > 0) {
+        throw new Error("Este telefone já está cadastrado em outra liderança.");
+      }
+    }
+
+    const payload = { ...input, telefone: tel || null };
+    const { data, error } = await sb.from("liderancas").insert(payload).select().single();
+    if (error) {
+      if (error.code === "23505") throw new Error("Este telefone já está cadastrado em outra liderança.");
+      throw error;
+    }
     auditoriaService.registrar({
       acao: "Criar", entidade: "Liderança", entidade_id: data.id,
       modulo: "Político", descricao: `Liderança criada: ${data.nome}`, dados_novos: data,

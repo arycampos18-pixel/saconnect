@@ -13,7 +13,7 @@ import {
 import { MessageCircle, CheckCircle2, Sparkles, Search, Pencil, Vote, Loader2, XCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { analiseService } from "../services/analiseService";
-import { EleitorFormDialog } from "../components/EleitorFormDialog";
+import { NovoEleitorMenu } from "@/modules/eleitores/components/NovoEleitorMenu";
 import { WhatsAppValidacaoDialog } from "../components/WhatsAppValidacaoDialog";
 import { EleitorDetalheDialog } from "../components/EleitorDetalheDialog";
 import { EleitorEditDialog } from "../components/EleitorEditDialog";
@@ -164,13 +164,7 @@ export default function AnaliseEleitores() {
     <PageShell
       title="Todos os Eleitores"
       description="Base unificada de eleitores."
-      actions={
-        <EleitorFormDialog
-          onCreated={(eleitor) =>
-            eleitor && setValidar({ id: eleitor.id, nome: eleitor.nome, telefone: eleitor.telefone_original ?? eleitor.telefone, auto: true })
-          }
-        />
-      }
+      actions={<NovoEleitorMenu />}
     >
       <Card>
         <CardContent className="p-3 grid gap-2 md:grid-cols-5 sm:grid-cols-2">
