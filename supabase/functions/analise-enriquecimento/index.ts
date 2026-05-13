@@ -309,14 +309,10 @@ async function chamarProvedor(payload: { cpf?: string; telefone?: string; idFina
       };
     }
     // 2) Endpoints SA Connect Data Localize v3.
-    // OAuth2 usa api.assertivasolucoes.com.br/oauth2/v3/token
-    // Dados usam integracao.assertivasolucoes.com.br/v3/localize/v3/cpf|telefone
-    // (hosts diferentes conforme documentação oficial)
+    // Swagger oficial confirma: servidor api.assertivasolucoes.com.br, path /localize/v3/
     const finalidade = payload.idFinalidade ?? 1;
-    const dataHost = envUrl
-      ? resolveProvedorApiHost(envUrl)
-      : "integracao.assertivasolucoes.com.br";
-    const v3 = `https://${dataHost}/v3/localize/v3`;
+    const dataHost = envUrl ? resolveProvedorApiHost(envUrl) : "api.assertivasolucoes.com.br";
+    const v3 = `https://${dataHost}/localize/v3`;
     const fullUrl = payload.cpf
       ? `${v3}/cpf?cpf=${encodeURIComponent(payload.cpf)}&idFinalidade=${finalidade}`
       : `${v3}/telefone?telefone=${encodeURIComponent(payload.telefone ?? "")}&idFinalidade=${finalidade}`;
