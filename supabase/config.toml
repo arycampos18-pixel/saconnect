@@ -13,3 +13,7 @@ verify_jwt = false
 
 [functions.auto-cadastro-submit]
 verify_jwt = false
+
+# OTP de WhatsApp para pesquisas públicas
+[functions.public-enviar-otp]
+verify_jwt = false
