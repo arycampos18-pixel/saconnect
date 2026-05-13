@@ -15,13 +15,84 @@ import { toast } from "sonner";
 import { pesquisaService, type Pergunta, type Pesquisa } from "../services/pesquisaService";
 import { formatPhoneBR } from "@/shared/utils/phone";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const SUPABASE_KEY = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ?? "";
+/** Se definido, POST do OTP usa esta URL (mesmo domínio do site + proxy Nginx → Supabase). */
+const PUBLIC_OTP_SEND_URL = (import.meta.env.VITE_PUBLIC_OTP_SEND_URL as string | undefined)?.trim() ?? "";
 
 // Cliente anon — sem JWT, contorna RESTRICTIVE policy tenant_active_company_guard
-const anonSb = createClient(SUPABASE_URL, SUPABASE_KEY) as any;
+const anonSb =
+  SUPABASE_URL && SUPABASE_KEY
+    ? (createClient(SUPABASE_URL, SUPABASE_KEY) as any)
+    : (createClient("https://invalid.supabase.co", "invalid-anon-key") as any);
 
 type Etapa = "identificacao" | "codigo" | "pesquisa";
+
+/** POST direto à Edge Function (evita falhas opacas do invoke; exige URL Supabase real, não o domínio do site). */
+async function postPublicEnviarOtp(body: { telefone: string; nome?: string }): Promise<{
+  ok: boolean;
+  data?: Record<string, unknown>;
+  errorMsg?: string;
+}> {
+  if (!SUPABASE_URL.startsWith("http") || !SUPABASE_KEY) {
+    return {
+      ok: false,
+      errorMsg:
+        "Configuração do aplicativo incompleta (Supabase). O build do site precisa de VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY — não use o domínio do site no lugar da URL *.supabase.co.",
+    };
+  }
+  const url =
+    PUBLIC_OTP_SEND_URL ||
+    `${SUPABASE_URL}/functions/v1/public-enviar-otp`;
+  const ac = new AbortController();
+  const t = window.setTimeout(() => ac.abort(), 28_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+      },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      return {
+        ok: false,
+        errorMsg: String(data.error ?? data.message ?? `Erro HTTP ${res.status}`),
+      };
+    }
+    if (!data.ok) {
+      return { ok: false, errorMsg: String(data.error ?? "Falha ao enviar código") };
+    }
+    return { ok: true, data };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const rede =
+      /failed to fetch|networkerror|load failed|aborted|timeout/i.test(msg) ||
+      msg === "Failed to send a request to the Edge Function";
+    if (rede) {
+      const curOrigin = typeof window !== "undefined" ? window.location.origin : "";
+      if (PUBLIC_OTP_SEND_URL) {
+        return {
+          ok: false,
+          errorMsg:
+            "Não foi possível contactar o endereço configurado para o envio do código. Verifique a rede, o Nginx e o rebuild com VITE_PUBLIC_OTP_SEND_URL.",
+        };
+      }
+      return {
+        ok: false,
+        errorMsg:
+          `Falha de rede ao contactar o Supabase (envio do código). Tente outro Wi‑Fi/dados móveis, desative bloqueadores ou confirme o certificado HTTPS. Solução em redes restritas: proxy no Nginx em ${curOrigin}/api/public-enviar-otp → função public-enviar-otp, depois no .env VITE_PUBLIC_OTP_SEND_URL=${curOrigin}/api/public-enviar-otp e npm run build (ver .env.example).`,
+      };
+    }
+    return { ok: false, errorMsg: msg };
+  } finally {
+    window.clearTimeout(t);
+  }
+}
 
 export default function PesquisaPublica() {
   const { slug } = useParams<{ slug: string }>();
@@ -77,29 +148,31 @@ export default function PesquisaPublica() {
   }, [slug]);
 
   // ── Etapa 1: Enviar OTP ────────────────────────────────────────────────────
-  const enviarOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nome.trim()) { toast.error("Informe seu nome"); return; }
+  const enviarOtp = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const tel = telefone.replace(/\D/g, "");
     if (tel.length < 10) { toast.error("Informe um WhatsApp válido com DDD"); return; }
     setEnviando(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/public-enviar-otp`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY },
-        body: JSON.stringify({ telefone: tel, nome: nome.trim() }),
+      const out = await postPublicEnviarOtp({
+        telefone: tel,
+        nome: nome.trim() || undefined,
       });
-      const data = await res.json() as Record<string, unknown>;
-      if (!res.ok || !data.ok) {
-        toast.error(String(data.error ?? "Falha ao enviar código. Verifique o número."));
+      if (!out.ok || !out.data) {
+        toast.error(out.errorMsg ?? "Falha ao enviar código. Tente de novo.");
         return;
       }
+      const data = out.data;
       setOtpId(data.id as string);
-      setTelMascarado(data.telefone_mascarado as string ?? `(${tel.slice(0,2)}) ****-${tel.slice(-4)}`);
+      const ddd = tel.length >= 10 ? tel.slice(0, 2) : "??";
+      setTelMascarado(
+        (data.telefone_mascarado as string) ?? `(${ddd}) ****-${tel.slice(-4)}`,
+      );
       setEtapa("codigo");
+      setCodigo("");
       toast.success("Código enviado! Verifique seu WhatsApp.");
-    } catch (err: any) {
-      toast.error(err.message ?? "Erro de rede");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro de rede");
     } finally { setEnviando(false); }
   };
 
@@ -140,10 +213,11 @@ export default function PesquisaPublica() {
       }));
       const tel = telefone.replace(/\D/g, "");
 
+      const nomeParticipante = nome.trim();
       const { data: rpcData, error: rpcErr } = await anonSb.rpc("public_submit_pesquisa", {
         _pesquisa_id: pesquisa!.id,
         _sessao_id: sessaoId,
-        _nome: nome.trim(),
+        _nome: nomeParticipante,
         _telefone: tel,
         _respostas: respostasArr,
       });
@@ -156,7 +230,7 @@ export default function PesquisaPublica() {
       if (jaVotou) throw new Error("Este WhatsApp já respondeu a esta pesquisa.");
       const payload = respostasArr.map((r) => ({
         pesquisa_id: pesquisa!.id, pergunta_id: r.pergunta_id, resposta: r.resposta,
-        sessao_id: sessaoId, participante_nome: nome.trim(),
+        sessao_id: sessaoId, participante_nome: nomeParticipante,
         participante_telefone: tel,
       }));
       const { error: insErr } = await anonSb.from("pesquisa_respostas").insert(payload);
@@ -209,7 +283,9 @@ export default function PesquisaPublica() {
       <div className="flex min-h-screen items-center justify-center bg-accent/30 px-4">
         <div className="max-w-md rounded-xl border bg-card p-8 text-center shadow-elegant-sm">
           <CheckCircle2 className="mx-auto mb-3 h-14 w-14 text-primary" />
-          <p className="text-xl font-bold text-foreground">Obrigado, {nome.split(" ")[0]}!</p>
+          <p className="text-xl font-bold text-foreground">
+            {nome.trim() ? `Obrigado, ${nome.trim().split(/\s+/)[0]}!` : "Obrigado pela sua participação!"}
+          </p>
           <p className="mt-2 text-muted-foreground">Sua resposta foi registrada com sucesso.</p>
         </div>
       </div>
@@ -229,22 +305,21 @@ export default function PesquisaPublica() {
               <h1 className="text-xl font-bold text-foreground">{pesquisa.titulo}</h1>
             </div>
             <p className="mb-6 text-sm text-muted-foreground">
-              Para participar, informe seu nome e número de WhatsApp. Enviaremos um código para verificar sua identidade.
+              Informe o WhatsApp com DDD. Enviaremos um código para verificar o número. O nome é opcional.
             </p>
 
             <form onSubmit={enviarOtp} className="space-y-4">
               <div className="space-y-1">
-                <Label htmlFor="id-nome">Seu nome completo *</Label>
+                <Label htmlFor="id-nome">Nome (opcional)</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   <Input
                     id="id-nome"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
-                    placeholder="Nome completo"
+                    placeholder="Se quiser, informe como prefere ser chamado"
                     className="pl-9 h-11"
                     maxLength={100}
-                    required
                   />
                 </div>
               </div>
@@ -332,9 +407,24 @@ export default function PesquisaPublica() {
               </Button>
             </form>
 
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              Não recebeu? Aguarde até 1 minuto ou volte e tente novamente.
-            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={enviando}
+                onClick={() => void enviarOtp()}
+              >
+                {enviando ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Reenviando…</>
+                ) : (
+                  "Reenviar código no WhatsApp"
+                )}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Não recebeu? Aguarde até 1 minuto, use Reenviar ou volte para alterar o número.
+              </p>
+            </div>
           </div>
         )}
 
@@ -348,7 +438,7 @@ export default function PesquisaPublica() {
             <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
               <span className="text-xs text-emerald-700">
-                WhatsApp verificado: <strong>{nome}</strong> — {telMascarado}
+                WhatsApp verificado{nome.trim() ? <> — <strong>{nome.trim()}</strong></> : null} — {telMascarado}
               </span>
             </div>
 

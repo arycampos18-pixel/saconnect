@@ -34,19 +34,16 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const telefone = String(body.telefone ?? "").replace(/\D/g, "");
-    const nome     = String(body.nome     ?? "").trim();
+    const nome = String(body.nome ?? "").trim();
 
     if (telefone.length < 10) {
       return json({ ok: false, error: "Informe um número de WhatsApp válido com DDD" }, 400);
     }
-    if (!nome) {
-      return json({ ok: false, error: "Informe seu nome" }, 400);
-    }
 
-    // 1) Criar OTP no banco
+    // 1) Criar OTP no banco (nome opcional)
     const { data: otpData, error: otpErr } = await admin.rpc("public_criar_otp", {
       _telefone: telefone,
-      _nome:     nome,
+      _nome:     nome || null,
     });
 
     if (otpErr || !otpData?.ok) {
@@ -56,41 +53,54 @@ Deno.serve(async (req: Request) => {
     const codigo = otpData.codigo as string;
     const id     = otpData.id as string;
 
-    // 2) Buscar credenciais Z-API (env ou banco)
-    let instanceId    = INSTANCE_ID;
-    let instanceToken = INSTANCE_TOKEN;
-    let clientToken   = CLIENT_TOKEN;
+    // 2) Credenciais Z-API: secrets da função OU sessão padrão no banco (mesmo padrão de agenda-notificacoes-diarias)
+    const normalizePhoneBR = (raw: string) => {
+      const d = raw.replace(/\D/g, "");
+      if (d.length === 10 || d.length === 11) return `55${d}`;
+      if (d.length === 12 || d.length === 13) return d;
+      return d;
+    };
 
-    if (!instanceId || !instanceToken) {
-      const { data: cfg } = await admin
-        .from("whatsapp_config")
-        .select("instance_id, instance_token, client_token")
-        .eq("ativo", true)
-        .limit(1)
-        .maybeSingle();
-      if (cfg) {
-        instanceId    = cfg.instance_id    ?? instanceId;
-        instanceToken = cfg.instance_token ?? instanceToken;
-        clientToken   = cfg.client_token   ?? clientToken;
-      }
+    let instanceId = (INSTANCE_ID ?? "").trim();
+    let instanceToken = (INSTANCE_TOKEN ?? "").trim();
+    let clientToken = (CLIENT_TOKEN ?? "").trim();
+
+    const { data: sess } = await admin
+      .from("whatsapp_sessions")
+      .select("credentials")
+      .eq("provider", "zapi")
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const c = (sess?.credentials ?? {}) as Record<string, string>;
+    const dbId = (c.instance_id ?? "").trim();
+    const dbTok = (c.token ?? "").trim();
+    const dbCt = (c.client_token ?? "").trim();
+    if (!instanceId && dbId) instanceId = dbId;
+    if (!instanceToken && dbTok) instanceToken = dbTok;
+    if (!clientToken && dbCt) clientToken = dbCt;
+
+    if (!instanceId || !instanceToken || !clientToken) {
+      return json({
+        ok: false,
+        error:
+          "Z-API não configurado (instância + token + Client-Token). Cadastre uma sessão em WhatsApp ou defina os secrets ZAPI_* na Edge Function.",
+      }, 503);
     }
 
-    if (!instanceId || !instanceToken) {
-      return json({ ok: false, error: "Z-API não configurado. Configure a integração WhatsApp." }, 503);
-    }
+    // 3) Número apenas dígitos, DDI 55
+    const tel = normalizePhoneBR(telefone);
 
-    // 3) Formatar número para Z-API (55 + DDD + número)
-    let tel = telefone;
-    if (!tel.startsWith("55")) tel = "55" + tel;
-
-    const msg = `Olá, ${nome}! 👋\n\nSeu código de verificação para a pesquisa é:\n\n*${codigo}*\n\nVálido por 10 minutos. Não compartilhe com ninguém.`;
+    const saud = nome ? `Olá, ${nome}! 👋` : "Olá! 👋";
+    const msg = `${saud}\n\nSeu código de verificação para a pesquisa é:\n\n*${codigo}*\n\nVálido por 10 minutos. Não compartilhe com ninguém.`;
 
     // 4) Enviar via Z-API
     const zapiUrl = `https://api.z-api.io/instances/${instanceId}/token/${instanceToken}/send-text`;
     const zapiHeaders: Record<string, string> = {
       "Content-Type": "application/json",
+      "Client-Token": clientToken,
     };
-    if (clientToken) zapiHeaders["Client-Token"] = clientToken;
 
     const zapiRes = await fetch(zapiUrl, {
       method: "POST",
@@ -100,12 +110,16 @@ Deno.serve(async (req: Request) => {
     });
 
     const zapiBody = await zapiRes.json().catch(() => ({})) as Record<string, unknown>;
+    const zapiErrText = (() => {
+      const e = zapiBody.error ?? zapiBody.message;
+      return typeof e === "string" ? e : "";
+    })();
 
-    if (!zapiRes.ok) {
+    if (!zapiRes.ok || zapiErrText) {
       console.error("[public-enviar-otp] Z-API error:", zapiRes.status, zapiBody);
       return json({
         ok: false,
-        error: `Falha ao enviar WhatsApp: ${zapiBody.error ?? zapiBody.message ?? zapiRes.status}`,
+        error: `Falha ao enviar WhatsApp: ${zapiErrText || zapiRes.status}`,
       }, 502);
     }
 

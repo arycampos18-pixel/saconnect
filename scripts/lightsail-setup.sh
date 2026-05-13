@@ -36,6 +36,18 @@ server {
     location / {
         try_files \$uri \$uri/ /index.html;
     }
+    # Descomente após preencher REF e rebuildar o frontend com:
+    #   VITE_PUBLIC_OTP_SEND_URL=https://SEU_DOMINIO/api/public-enviar-otp
+    # Isto faz o POST do OTP ir para o mesmo domínio (evita bloqueios a *.supabase.co).
+    #location = /api/public-enviar-otp {
+    #    proxy_pass https://REF.supabase.co/functions/v1/public-enviar-otp;
+    #    proxy_http_version 1.1;
+    #    proxy_ssl_server_name on;
+    #    proxy_set_header Host REF.supabase.co;
+    #    proxy_set_header Authorization \$http_authorization;
+    #    proxy_set_header apikey \$http_apikey;
+    #    proxy_set_header Content-Type application/json;
+    #}
 }
 NGX
 
