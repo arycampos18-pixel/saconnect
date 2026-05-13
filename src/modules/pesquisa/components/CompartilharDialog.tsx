@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { Copy, Check, Download, ExternalLink } from "lucide-react";
+import { Copy, Check, Download, ExternalLink, MessageCircle, Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import type { Pesquisa } from "../services/pesquisaService";
+import { encurtarUrl } from "@/shared/utils/urlShortener";
 
 export function CompartilharDialog({
   pesquisa, open, onOpenChange,
 }: { pesquisa: Pesquisa | null; open: boolean; onOpenChange: (v: boolean) => void }) {
   const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
 
   if (!pesquisa) return null;
@@ -40,6 +42,20 @@ export function CompartilharDialog({
     setCopied(true);
     toast.success("Link copiado!");
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const compartilharWhats = async () => {
+    if (!url) return;
+    setSharing(true);
+    try {
+      const curto = await encurtarUrl(url);
+      const msg = encodeURIComponent(
+        `Olá! Responda nossa pesquisa clicando no link:\n${curto}`
+      );
+      window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener");
+    } finally {
+      setSharing(false);
+    }
   };
 
   const baixarQR = () => {
@@ -115,7 +131,7 @@ export function CompartilharDialog({
                 className="flex-1"
                 onClick={baixarQR}
               >
-                <Download className="h-4 w-4 mr-1.5" /> Baixar QR Code
+                <Download className="h-4 w-4 mr-1.5" /> Baixar QR
               </Button>
               <Button
                 variant="outline"
@@ -123,9 +139,22 @@ export function CompartilharDialog({
                 className="flex-1"
                 onClick={() => window.open(url, "_blank", "noopener")}
               >
-                <ExternalLink className="h-4 w-4 mr-1.5" /> Abrir link
+                <ExternalLink className="h-4 w-4 mr-1.5" /> Abrir
               </Button>
             </div>
+
+            {/* WhatsApp com link encurtado */}
+            <Button
+              className="w-full bg-[#25D366] hover:bg-[#1ebe57] text-white"
+              size="sm"
+              onClick={compartilharWhats}
+              disabled={sharing}
+            >
+              {sharing
+                ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                : <MessageCircle className="h-4 w-4 mr-1.5" />}
+              {sharing ? "Encurtando link…" : "Compartilhar via WhatsApp"}
+            </Button>
 
             <p className="text-center text-[11px] text-muted-foreground">
               A pesquisa precisa estar <strong>Ativa</strong> para aceitar respostas.

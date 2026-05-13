@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { encurtarUrl } from "@/shared/utils/urlShortener";
 import { QRCodeCanvas } from "qrcode.react";
 import { Plus, UserPlus, Link2, QrCode, Copy, Check, MessageCircle, Download, Loader2, Send, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,8 @@ export function NovoEleitorMenu() {
     try {
       const u = await gerarToken("whatsapp", tel);
       if (!u) return;
-      const msg = `Olá! 👋\n\nClique no link abaixo para se cadastrar na nossa base:\n${u}`;
+      const curto = await encurtarUrl(u);
+      const msg = `Olá! 👋\n\nClique no link abaixo para se cadastrar na nossa base:\n${curto}`;
       const { data, error } = await supabase.functions.invoke("send-whatsapp-zapi", {
         body: { to: tel, message: msg },
       });
@@ -134,10 +136,12 @@ export function NovoEleitorMenu() {
     }
   };
 
-  const compartilharWhats = () => {
+  const compartilharWhats = async () => {
     if (!tokenUrl) return;
+    // Encurta para que o WhatsApp reconheça como link clicável (IP não é linkificado)
+    const curto = await encurtarUrl(tokenUrl);
     const msg = encodeURIComponent(
-      `Olá! Faça seu cadastro de eleitor pelo link abaixo:\n${tokenUrl}`
+      `Olá! Faça seu cadastro de eleitor pelo link abaixo:\n${curto}`
     );
     window.open(`https://wa.me/?text=${msg}`, "_blank", "noopener");
   };
