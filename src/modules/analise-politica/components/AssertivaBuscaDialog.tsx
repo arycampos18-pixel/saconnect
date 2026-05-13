@@ -251,11 +251,11 @@ export function AssertivaBuscaDialog({
               {resultado.ok && !resultado.skipped
                 ? <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 : <AlertTriangle className="h-4 w-4 text-amber-600" />}
-              {resultado.ok && !resultado.skipped
-                ? `${resultado.campos_aplicados?.length ?? 0} campo(s) aplicado(s) ao cadastro de ${eleitorNome}`
-                : resultado.skipped
-                  ? resultado.motivo ?? "Nenhuma pessoa encontrada."
-                  : resultado.erro ?? "Erro na consulta"}
+            {resultado.ok && !resultado.skipped
+              ? `${resultado.campos_aplicados?.length ?? 0} campo(s) aplicado(s) ao cadastro de ${eleitorNome}`
+              : resultado.skipped
+                ? resultado.motivo ?? "Nenhuma pessoa encontrada."
+                : resultado.erro ?? resultado.errorMsg ?? "Erro na consulta"}
             </div>
 
             {resultado.ok && !resultado.skipped && Object.keys(d).length > 0 && (
@@ -291,6 +291,18 @@ export function AssertivaBuscaDialog({
                   <Badge key={c} variant="secondary" className="text-[10px]">{c}</Badge>
                 ))}
               </div>
+            )}
+
+            {/* Detalhes do erro da API */}
+            {!resultado.ok && resultado.dados && (
+              <details className="mt-2 text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                  Ver detalhe do erro
+                </summary>
+                <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted/40 p-2 whitespace-pre-wrap">
+                  {JSON.stringify(resultado.dados, null, 2)}
+                </pre>
+              </details>
             )}
           </div>
         )}
