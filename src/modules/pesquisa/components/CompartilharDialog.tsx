@@ -1,11 +1,10 @@
 import { useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { Copy, Check, Download, ExternalLink, MessageCircle, Loader2 } from "lucide-react";
+import { Copy, Check, Download, MessageCircle, Loader2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import type { Pesquisa } from "../services/pesquisaService";
 import { encurtarUrl } from "@/shared/utils/urlShortener";
@@ -100,27 +99,27 @@ export function CompartilharDialog({
               />
             </div>
 
-            <p className="text-center text-xs text-muted-foreground break-all px-2">
-              {url}
-            </p>
-
-            {/* Campo de link + copiar */}
-            <div className="flex w-full gap-2">
-              <Input
-                value={url}
-                readOnly
-                className="text-xs"
-                onFocus={(e) => e.currentTarget.select()}
-              />
-              <Button
-                size="icon"
-                variant={copied ? "default" : "outline"}
+            {/* Link clicável — clica e abre direto */}
+            <div className="flex w-full items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 truncate text-sm font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800 break-all"
+              >
+                {url}
+              </a>
+              <button
                 onClick={copy}
                 title="Copiar link"
-                className={copied ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
+                className={`shrink-0 rounded-md p-1.5 transition-colors ${
+                  copied
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                }`}
               >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </Button>
+              </button>
             </div>
 
             {/* Ações */}
@@ -132,14 +131,6 @@ export function CompartilharDialog({
                 onClick={baixarQR}
               >
                 <Download className="h-4 w-4 mr-1.5" /> Baixar QR
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => window.open(url, "_blank", "noopener")}
-              >
-                <ExternalLink className="h-4 w-4 mr-1.5" /> Abrir
               </Button>
             </div>
 
