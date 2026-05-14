@@ -118,7 +118,12 @@ export const departamentosService = {
       status: (m.status ?? "Ativo") === "Inativo" ? "inativo" : "ativo",
     };
     const { data, error } = await (supabase as any).from("membros").insert(payload).select("*").single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("Este membro já está cadastrado neste departamento.");
+      }
+      throw error;
+    }
     return mapMembro(data);
   },
   async atualizarMembro(id: string, p: Partial<MembroDep>): Promise<void> {
