@@ -59,7 +59,7 @@ export const departamentosService = {
     return (data ?? []).map(mapDep);
   },
   async listarMembros(): Promise<MembroDep[]> {
-    const { data, error } = await supabase.from("departamento_membros").select("*").order("created_at", { ascending: false });
+    const { data, error } = await (supabase as any).from("membros").select("*").order("created_at", { ascending: false });
     if (error) throw error;
     return (data ?? []).map(mapMembro);
   },
@@ -100,15 +100,24 @@ export const departamentosService = {
     const { error } = await supabase.from("departamentos").delete().eq("id", id);
     if (error) throw error;
   },
-  async adicionarMembro(m: Omit<MembroDep, "id" | "entradaEm" | "status"> & { status?: MembroDep["status"]; eleitorId?: string | null; }): Promise<MembroDep> {
+  async adicionarMembro(m: Omit<MembroDep, "id" | "entradaEm" | "status"> & {
+    status?: MembroDep["status"]; eleitorId?: string | null;
+    cidade?: string | null; uf?: string | null; rua?: string | null;
+    numero?: string | null; complemento?: string | null; cep?: string | null;
+    genero?: string | null; data_nascimento?: string | null; observacoes?: string | null;
+  }): Promise<MembroDep> {
     const payload: any = {
       departamento_id: m.departamentoId, eleitor_id: m.eleitorId ?? null,
       nome: m.nome, telefone: m.telefone, email: m.email ?? null,
       cpf: m.cpf ?? null, bairro: m.bairro ?? null,
+      cidade: m.cidade ?? null, uf: m.uf ?? null, rua: m.rua ?? null,
+      numero: m.numero ?? null, complemento: m.complemento ?? null, cep: m.cep ?? null,
+      genero: m.genero ?? null, observacoes: m.observacoes ?? null,
+      data_nascimento: m.data_nascimento || null,
       funcao: funcaoToDb(m.funcao),
       status: (m.status ?? "Ativo") === "Inativo" ? "inativo" : "ativo",
     };
-    const { data, error } = await supabase.from("departamento_membros").insert(payload).select("*").single();
+    const { data, error } = await (supabase as any).from("membros").insert(payload).select("*").single();
     if (error) throw error;
     return mapMembro(data);
   },
@@ -121,12 +130,13 @@ export const departamentosService = {
     if (p.bairro !== undefined) patch.bairro = p.bairro ?? null;
     if (p.funcao !== undefined) patch.funcao = funcaoToDb(p.funcao);
     if (p.status !== undefined) patch.status = p.status === "Inativo" ? "inativo" : "ativo";
-    const { error } = await supabase.from("departamento_membros").update(patch).eq("id", id);
+    const { error } = await (supabase as any).from("membros").update(patch).eq("id", id);
     if (error) throw error;
   },
   async removerMembro(id: string): Promise<void> {
-    const { error } = await supabase.from("departamento_membros").delete().eq("id", id);
-    if (error) throw error;
+    // Remove da tabela membros (nova) e da antiga para compatibilidade
+    await (supabase as any).from("membros").delete().eq("id", id);
+    await (supabase as any).from("departamento_membros").delete().eq("id", id);
   },
   async registrarInteracao(i: Omit<InteracaoDep, "id">): Promise<InteracaoDep> {
     const payload: any = {

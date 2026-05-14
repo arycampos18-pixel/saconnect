@@ -109,7 +109,8 @@ export function AdicionarMembroDialog({
     catalogosService.tags().then(setTagsDisponiveis).catch(() => {});
   }, [open]);
 
-  // Checagem de duplicidade (telefone + CPF) com debounce
+  // Checagem de duplicidade (telefone + CPF) com debounce + auto-preenchimento
+  const [eleitorExistente, setEleitorExistente] = useState<any | null>(null);
   const telDigits = onlyDigits(novo.telefone);
   const cpfDigits = onlyDigitsCPF(novo.cpf);
   const telValido = isValidPhoneBR(novo.telefone);
@@ -117,6 +118,7 @@ export function AdicionarMembroDialog({
     if (tab !== "novo") return;
     if (telDigits.length < 10 && cpfDigits.length !== 11) {
       setDupCheck({ loading: false, porTelefone: null, porCpf: null });
+      setEleitorExistente(null);
       return;
     }
     let cancelled = false;
@@ -127,7 +129,38 @@ export function AdicionarMembroDialog({
           telefone: telDigits.length >= 10 ? telDigits : null,
           cpf: cpfDigits.length === 11 ? cpfDigits : null,
         });
-        if (!cancelled) setDupCheck({ loading: false, ...r });
+        if (!cancelled) {
+          setDupCheck({ loading: false, ...r });
+          // Se já cadastrado, busca dados completos para pre-preencher
+          const existId = r.porTelefone?.id ?? r.porCpf?.id;
+          if (existId) {
+            const { data } = await (supabase as any)
+              .from("eleitores")
+              .select("id,nome,telefone,telefone_original,email,cpf,bairro,cidade,uf,rua,numero,complemento,cep,genero,data_nascimento")
+              .eq("id", existId)
+              .maybeSingle();
+            if (!cancelled && data) {
+              setEleitorExistente(data);
+              setNovo((prev) => ({
+                ...prev,
+                nome: data.nome ?? prev.nome,
+                email: data.email ?? prev.email,
+                cpf: data.cpf ?? prev.cpf,
+                bairro: data.bairro ?? prev.bairro,
+                cidade: data.cidade ?? prev.cidade,
+                uf: data.uf ?? prev.uf,
+                rua: data.rua ?? prev.rua,
+                numero: data.numero ?? prev.numero,
+                complemento: data.complemento ?? prev.complemento,
+                cep: data.cep ?? prev.cep,
+                genero: data.genero ?? prev.genero,
+                data_nascimento: data.data_nascimento?.slice(0, 10) ?? prev.data_nascimento,
+              }));
+            }
+          } else {
+            if (!cancelled) setEleitorExistente(null);
+          }
+        }
       } catch {
         if (!cancelled) setDupCheck({ loading: false, porTelefone: null, porCpf: null });
       }
@@ -169,18 +202,16 @@ export function AdicionarMembroDialog({
       toast.error("CPF inválido. Verifique os dígitos verificadores.");
       return;
     }
-    if (dupCheck.porTelefone) {
-      toast.error(`Telefone já cadastrado para o eleitor ${dupCheck.porTelefone.nome}.`);
-      return;
-    }
-    if (dupCheck.porCpf) {
-      toast.error(`CPF já cadastrado para o eleitor ${dupCheck.porCpf.nome}.`);
-      return;
-    }
     setSalvandoNovo(true);
     try {
+      let eleitorId: string;
+
+      if (eleitorExistente) {
+        // Eleitor já existe — usa o ID existente sem criar duplicata
+        eleitorId = eleitorExistente.id;
+      } else {
       // 1) Cria o eleitor na base
-      const eleitorId = await eleitoresService.create({
+      eleitorId = await eleitoresService.create({
         nome: v.nome,
         telefone: v.telefone,
         email: v.email || null,
@@ -199,6 +230,8 @@ export function AdicionarMembroDialog({
         consentimento_lgpd: v.consentimento_lgpd,
         tag_ids: tagsSel,
       });
+      } // fim do else (eleitor novo)
+
       // 2) Vincula o eleitor ao departamento como membro
       await depStore.adicionarMembro({
         departamentoId,
@@ -208,10 +241,22 @@ export function AdicionarMembroDialog({
         email: v.email || undefined,
         cpf: v.cpf || undefined,
         bairro: v.bairro || undefined,
+        cidade: v.cidade || undefined,
+        uf: v.uf || undefined,
+        rua: v.rua || undefined,
+        numero: v.numero || undefined,
+        complemento: v.complemento || undefined,
+        cep: v.cep || undefined,
+        genero: v.genero || undefined,
+        data_nascimento: v.data_nascimento || undefined,
+        observacoes: v.observacoes || undefined,
         funcao: v.funcao,
       });
-      toast.success("Eleitor cadastrado e adicionado ao departamento");
+      toast.success(eleitorExistente
+        ? `${v.nome} adicionado ao departamento (eleitor já existente).`
+        : "Eleitor cadastrado e adicionado ao departamento.");
       setNovo(novoInicial);
+      setEleitorExistente(null);
       setTagsSel([]);
       onOpenChange(false);
     } catch (e: any) {
@@ -316,7 +361,7 @@ export function AdicionarMembroDialog({
                           : !telValido
                           ? "border-destructive pr-9"
                           : dupCheck.porTelefone
-                          ? "border-destructive pr-9"
+                          ? "border-amber-400 pr-9"
                           : "border-emerald-500 pr-9"
                       }
                     />
@@ -325,7 +370,9 @@ export function AdicionarMembroDialog({
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       ) : telDigits.length >= 10 && telValido && !dupCheck.porTelefone ? (
                         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      ) : telDigits.length > 0 && (!telValido || dupCheck.porTelefone) ? (
+                      ) : telDigits.length > 0 && dupCheck.porTelefone ? (
+                        <CheckCircle2 className="h-4 w-4 text-amber-500" />
+                      ) : telDigits.length > 0 && !telValido ? (
                         <AlertCircle className="h-4 w-4 text-destructive" />
                       ) : null}
                     </div>
@@ -334,8 +381,9 @@ export function AdicionarMembroDialog({
                     <p className="mt-1 text-xs text-destructive">Telefone inválido (use DDD + número).</p>
                   )}
                   {telValido && dupCheck.porTelefone && (
-                    <p className="mt-1 text-xs text-destructive">
-                      Já cadastrado: {dupCheck.porTelefone.nome}
+                    <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Já cadastrado: <strong>{dupCheck.porTelefone.nome}</strong> — dados preenchidos automaticamente.
                     </p>
                   )}
                   {telValido && !dupCheck.porTelefone && !dupCheck.loading && telDigits.length >= 10 && (
@@ -490,7 +538,9 @@ export function AdicionarMembroDialog({
           {tab === "eleitor" && <Button onClick={adicionarDoEleitor} disabled={!selecionado}>Adicionar eleitor</Button>}
           {tab === "novo" && (
             <Button onClick={cadastrarNovo} disabled={salvandoNovo}>
-              {salvandoNovo ? "Salvando…" : "Cadastrar eleitor e adicionar"}
+              {salvandoNovo ? "Salvando…"
+                : eleitorExistente ? "Adicionar ao departamento"
+                : "Cadastrar e adicionar"}
             </Button>
           )}
           {tab === "csv" && <Button onClick={importarCSV}>Importar</Button>}
