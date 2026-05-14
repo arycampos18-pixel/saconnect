@@ -16,7 +16,10 @@ const statusInteracaoFromDb = (s: string | null | undefined): InteracaoDep["stat
 const statusInteracaoToDb = (s: InteracaoDep["status"]) =>
   s === "Pendente" ? "pendente" : s === "Em andamento" ? "em_andamento" : "concluido";
 
-const mapDep = (r: any): DepartamentoGab => ({
+const mapDep = (r: any): DepartamentoGab => {
+  const statusRaw = String(r?.status ?? "").toLowerCase();
+  const inativo = r?.ativo === false || statusRaw === "inativo";
+  return {
   id: r.id,
   nome: r.nome,
   descricao: r.descricao ?? "",
@@ -25,9 +28,10 @@ const mapDep = (r: any): DepartamentoGab => ({
   area: r.area_atuacao ?? undefined,
   telefone: r.telefone ?? undefined,
   email: r.email ?? undefined,
-  status: r.status === "inativo" ? "Inativo" : "Ativo",
+  status: inativo ? "Inativo" : "Ativo",
   criadoEm: (r.created_at ?? new Date().toISOString()).slice(0, 10),
-});
+};
+};
 
 const mapMembro = (r: any): MembroDep => ({
   id: r.id,
