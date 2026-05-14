@@ -153,6 +153,18 @@ export const settingsService = {
     if (error) throw error;
   },
 
+  /** Nome e e-mail em `settings_users` e `profiles` (login Auth é separado). */
+  async atualizarCadastroUsuario(userId: string, input: { nome: string; email: string }) {
+    const nome = input.nome.trim();
+    const email = input.email.trim();
+    if (!nome) throw new Error("Nome é obrigatório.");
+    if (!email.includes("@")) throw new Error("E-mail inválido.");
+    const { error: e1 } = await sb.from("settings_users").update({ nome, email }).eq("id", userId);
+    if (e1) throw e1;
+    const { error: e2 } = await sb.from("profiles").update({ nome, email }).eq("user_id", userId);
+    if (e2) throw e2;
+  },
+
   // ---------- Perfis & Permissões ----------
   async listarPerfis(companyId: string): Promise<SettingsProfile[]> {
     const { data, error } = await sb

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, UserPlus, UserCog, KeyRound } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, UserPlus, UserCog, KeyRound, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { useCompany } from "../contexts/CompanyContext";
 import { settingsService } from "../services/settingsService";
@@ -25,6 +26,10 @@ export default function UsersManager() {
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmaSenha, setConfirmaSenha] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
+  const [editCadastro, setEditCadastro] = useState<{ userId: string; nome: string; email: string } | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const canManage = hasPermission("settings.users.manage");
 
@@ -73,6 +78,42 @@ export default function UsersManager() {
     }
   }
 
+  function abrirEditarCadastro(l: { user_id: string; settings_users?: { nome?: string; email?: string } }) {
+    setEditCadastro({
+      userId: l.user_id,
+      nome: l.settings_users?.nome ?? "",
+      email: l.settings_users?.email ?? "",
+    });
+    setEditNome(l.settings_users?.nome ?? "");
+    setEditEmail(l.settings_users?.email ?? "");
+  }
+
+  async function salvarCadastroUsuario() {
+    if (!editCadastro) return;
+    if (!editNome.trim()) {
+      toast.error("Informe o nome.");
+      return;
+    }
+    if (!editEmail.trim().includes("@")) {
+      toast.error("E-mail inválido.");
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await settingsService.atualizarCadastroUsuario(editCadastro.userId, {
+        nome: editNome.trim(),
+        email: editEmail.trim(),
+      });
+      toast.success("Cadastro atualizado.");
+      setEditCadastro(null);
+      qc.invalidateQueries({ queryKey: ["settings_company_users", currentCompany?.id] });
+    } catch (e: any) {
+      toast.error(e.message ?? "Não foi possível salvar (verifique permissões).");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   async function definirNovaSenha() {
     if (!resetTarget) return;
     if (novaSenha.length < 8) { toast.error("Senha deve ter pelo menos 8 caracteres"); return; }
@@ -109,6 +150,15 @@ export default function UsersManager() {
         )}
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Lista só quem já está vinculado a <strong>esta empresa</strong> (tabela{" "}
+          <code className="rounded bg-muted px-1 text-xs">settings_user_companies</code>). Para marcar empresa
+          padrão ou remover vínculo, abra{" "}
+          <Link to="/app/settings/user-company" className="font-medium text-primary underline underline-offset-2">
+            Vínculos com empresas
+          </Link>
+          . O mesmo utilizador pode aparecer noutras empresas ao mudar o seletor de empresa no topo.
+        </p>
         <Input placeholder="Buscar nome ou email..." value={busca} onChange={(e) => setBusca(e.target.value)} className="max-w-sm" />
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground">
@@ -156,7 +206,14 @@ export default function UsersManager() {
                   </TableCell>
                   <TableCell className="text-right">
                     {canManage && (
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => abrirEditarCadastro(l)}
+                        >
+                          <Pencil className="mr-1 h-3.5 w-3.5" /> Editar cadastro
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -200,6 +257,45 @@ export default function UsersManager() {
           />
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={!!editCadastro}
+        onOpenChange={(v) => {
+          if (!v) {
+            setEditCadastro(null);
+            setEditNome("");
+            setEditEmail("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar cadastro do usuário</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Atualiza nome e e-mail em <strong>settings_users</strong> e <strong>profiles</strong>. O e-mail de login no
+            Authentication só muda se for alterado no Supabase ou pelo fluxo de convite.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <Label>Nome</Label>
+              <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} autoComplete="name" />
+            </div>
+            <div>
+              <Label>E-mail (cadastro)</Label>
+              <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} autoComplete="email" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditCadastro(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={salvarCadastroUsuario} disabled={editSaving}>
+              {editSaving ? "Salvando…" : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!resetTarget} onOpenChange={(v) => { if (!v) { setResetTarget(null); setNovaSenha(""); setConfirmaSenha(""); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader>

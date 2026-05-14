@@ -19,7 +19,8 @@ export default function SettingsHub() {
       icon={Settings}
       submodules={[
         { to: "/app/settings/companies", title: "Empresas / Tenants", description: "Multi-tenant e ambientes", icon: Building2 },
-        { to: "/app/settings/users", title: "Usuários", description: "Cadastro e acessos", icon: UserCog },
+        { to: "/app/settings/users", title: "Usuários", description: "Cadastro, perfil e ações na empresa atual", icon: UserCog },
+        { to: "/app/settings/user-company", title: "Vínculos com empresas", description: "Empresa padrão, desvincular e visão global (super admin)", icon: Share2 },
         { to: "/app/settings/roles", title: "Perfis & Permissões", description: "Defina papéis e o que cada um pode fazer", icon: ShieldCheck },
         { to: "/app/backup", title: "Backup", description: "Exportação e restauração", icon: Database },
         { to: "/app/notificacoes", title: "Notificações", description: "Central de alertas", icon: Bell },
