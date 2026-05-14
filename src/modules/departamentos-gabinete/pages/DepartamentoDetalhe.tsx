@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Pencil, Plus, MessageSquare, Trash2, Search,
+  ArrowLeft, Pencil, Plus, MessageSquare, Search,
   Phone, Mail, MapPin, Calendar, Building2, Users2, Activity, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -246,10 +246,6 @@ export default function DepartamentoDetalhe() {
                           <Button size="icon" variant="ghost" title="Inativar / reativar"
                             onClick={() => depStore.atualizarMembro(m.id, { status: m.status === "Ativo" ? "Inativo" : "Ativo" })}>
                             <Activity className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" title="Remover"
-                            onClick={() => { depStore.removerMembro(m.id); toast.success("Membro removido"); }}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
                       </TableCell>
