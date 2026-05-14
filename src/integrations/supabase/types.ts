@@ -3255,18 +3255,24 @@ export type Database = {
           cidade: string | null
           company_id: string | null
           complemento: string | null
+          cpf: string | null
           created_at: string
           created_by: string | null
           data_fim: string | null
           data_inicio: string | null
+          data_nascimento: string | null
           email: string | null
+          genero: string | null
           id: string
           meta: number
           nome: string
+          nome_mae: string | null
           numero: string | null
           observacoes: string | null
           organizacao_id: string | null
+          origem: string | null
           regiao: string | null
+          rg: string | null
           rua: string | null
           status: string
           superior_id: string | null
@@ -3283,18 +3289,24 @@ export type Database = {
           cidade?: string | null
           company_id?: string | null
           complemento?: string | null
+          cpf?: string | null
           created_at?: string
           created_by?: string | null
           data_fim?: string | null
           data_inicio?: string | null
+          data_nascimento?: string | null
           email?: string | null
+          genero?: string | null
           id?: string
           meta?: number
           nome: string
+          nome_mae?: string | null
           numero?: string | null
           observacoes?: string | null
           organizacao_id?: string | null
+          origem?: string | null
           regiao?: string | null
+          rg?: string | null
           rua?: string | null
           status?: string
           superior_id?: string | null
@@ -3311,18 +3323,24 @@ export type Database = {
           cidade?: string | null
           company_id?: string | null
           complemento?: string | null
+          cpf?: string | null
           created_at?: string
           created_by?: string | null
           data_fim?: string | null
           data_inicio?: string | null
+          data_nascimento?: string | null
           email?: string | null
+          genero?: string | null
           id?: string
           meta?: number
           nome?: string
+          nome_mae?: string | null
           numero?: string | null
           observacoes?: string | null
           organizacao_id?: string | null
+          origem?: string | null
           regiao?: string | null
+          rg?: string | null
           rua?: string | null
           status?: string
           superior_id?: string | null

@@ -12,6 +12,21 @@ export type Lideranca = {
   status: string;
   observacoes: string | null;
   created_at: string;
+  cpf?: string | null;
+  rg?: string | null;
+  nome_mae?: string | null;
+  data_nascimento?: string | null;
+  genero?: string | null;
+  origem?: string | null;
+  cep?: string | null;
+  rua?: string | null;
+  numero?: string | null;
+  complemento?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  uf?: string | null;
+  meta?: number;
+  ativo?: boolean;
 };
 
 export type Cabo = {
@@ -72,7 +87,12 @@ export const liderancasCabosService = {
       }
     }
 
-    const payload = { ...input, telefone: tel || null };
+    const cpfDigits = (input.cpf ?? "").replace(/\D/g, "");
+    const payload = {
+      ...input,
+      telefone: tel || null,
+      cpf: cpfDigits.length ? cpfDigits : null,
+    };
     const { data, error } = await sb.from("liderancas").insert(payload).select().single();
     if (error) {
       if (error.code === "23505") throw new Error("Este telefone já está cadastrado em outra liderança.");
@@ -85,11 +105,20 @@ export const liderancasCabosService = {
     return data as Lideranca;
   },
   async atualizarLideranca(id: string, patch: Partial<Lideranca>) {
-    const { error } = await sb.from("liderancas").update(patch).eq("id", id);
+    const next = { ...patch } as Record<string, unknown>;
+    if (patch.telefone !== undefined) {
+      const t = (patch.telefone ?? "").replace(/\D/g, "");
+      next.telefone = t || null;
+    }
+    if (patch.cpf !== undefined) {
+      const c = (patch.cpf ?? "").replace(/\D/g, "");
+      next.cpf = c.length ? c : null;
+    }
+    const { error } = await sb.from("liderancas").update(next).eq("id", id);
     if (error) throw error;
     auditoriaService.registrar({
       acao: "Editar", entidade: "Liderança", entidade_id: id,
-      modulo: "Político", descricao: `Liderança atualizada`, dados_novos: patch,
+      modulo: "Político", descricao: `Liderança atualizada`, dados_novos: next as Partial<Lideranca>,
     });
   },
   async removerLideranca(id: string) {

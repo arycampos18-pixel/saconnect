@@ -24,21 +24,38 @@ export type AnaliseEleitor = {
   aceite_lgpd?: boolean;
 };
 
+export type ListarEleitoresPagina = {
+  rows: any[];
+  total: number;
+};
+
 export const analiseService = {
+  /** Lista eleitores com paginação (padrão 50 por página). `total` é o número de linhas que batem com os filtros. */
   async listarEleitores(filtros: {
     search?: string;
     bairro?: string | null;
     liderancaId?: string | null;
     caboId?: string | null;
     tagId?: string | null;
-  } = {}): Promise<any[]> {
+    page?: number;
+    pageSize?: number;
+  } = {}): Promise<ListarEleitoresPagina> {
+    const pageSize = Math.min(100, Math.max(1, filtros.pageSize ?? 50));
+    const page = Math.max(1, filtros.page ?? 1);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const tagAtiva = !!(filtros.tagId && filtros.tagId !== "todas");
+
+    const selectRelacoes = tagAtiva
+      ? "*, lideranca:liderancas!lideranca_id(id,nome), cabo:cabos_eleitorais!cabo_eleitoral_id(id,nome), eleitor_tags!inner(tag:tags(id,nome,cor))"
+      : "*, lideranca:liderancas!lideranca_id(id,nome), cabo:cabos_eleitorais!cabo_eleitoral_id(id,nome), eleitor_tags(tag:tags(id,nome,cor))";
+
     let q = sb
       .from("eleitores")
-      .select(
-        "*, lideranca:liderancas!lideranca_id(id,nome), cabo:cabos_eleitorais!cabo_eleitoral_id(id,nome), eleitor_tags(tag:tags(id,nome,cor))"
-      )
-      .order("created_at", { ascending: false })
-      .limit(2000);
+      .select(selectRelacoes, { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    if (tagAtiva) q = q.eq("eleitor_tags.tag_id", filtros.tagId);
     if (filtros.bairro && filtros.bairro !== "todos") q = q.eq("bairro", filtros.bairro);
     if (filtros.liderancaId && filtros.liderancaId !== "todas") q = q.eq("lideranca_id", filtros.liderancaId);
     if (filtros.caboId && filtros.caboId !== "todos") q = q.eq("cabo_eleitoral_id", filtros.caboId);
@@ -46,16 +63,14 @@ export const analiseService = {
       const s = filtros.search.replace(/[%_]/g, "");
       q = q.or(`nome.ilike.%${s}%,telefone.ilike.%${s}%,cpf.ilike.%${s}%`);
     }
-    const { data, error } = await q;
+
+    const { data, error, count } = await q.range(from, to);
     if (error) throw error;
-    let rows = (data ?? []).map((r: any) => ({
+    const rows = (data ?? []).map((r: any) => ({
       ...r,
       tags: (r.eleitor_tags ?? []).map((et: any) => et.tag).filter(Boolean),
     }));
-    if (filtros.tagId && filtros.tagId !== "todas") {
-      rows = rows.filter((r: any) => r.tags.some((t: any) => t.id === filtros.tagId));
-    }
-    return rows;
+    return { rows, total: count ?? rows.length };
   },
 
   async metricasDashboard(companyId: string | null) {

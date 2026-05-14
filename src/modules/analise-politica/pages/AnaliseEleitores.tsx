@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageShell } from "../components/PageShell";
@@ -10,7 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { MessageCircle, CheckCircle2, Sparkles, Search, Pencil, Vote, Loader2, XCircle } from "lucide-react";
+import {
+  MessageCircle, CheckCircle2, Sparkles, Search, Pencil, Vote, Loader2, XCircle,
+  ChevronLeft, ChevronRight,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { analiseService } from "../services/analiseService";
 import { NovoEleitorMenu } from "@/modules/eleitores/components/NovoEleitorMenu";
@@ -18,10 +21,13 @@ import { AssertivaBuscaDialog } from "../components/AssertivaBuscaDialog";
 import { WhatsAppValidacaoDialog } from "../components/WhatsAppValidacaoDialog";
 import { EleitorDetalheDialog } from "../components/EleitorDetalheDialog";
 import { EleitorEditDialog } from "../components/EleitorEditDialog";
+import { catalogosService } from "@/modules/eleitores/services/catalogosService";
 
 const sb: any = supabase;
+const PAGE_SIZE = 50;
 
 export default function AnaliseEleitores() {
+  const qc = useQueryClient();
   const [validar, setValidar] = useState<{ id: string; nome: string; telefone?: string | null; auto?: boolean } | null>(null);
   const [enriquecendoId, setEnriquecendoId] = useState<string | null>(null);
   const [buscandoEleitor, setBuscandoEleitor] = useState<{ id: string; nome: string; cpf?: string | null; telefone?: string | null } | null>(null);
@@ -88,9 +94,23 @@ export default function AnaliseEleitores() {
       // Actualiza também a linha no cache para que ao abrir "Editar" depois, os dados estejam frescos
       qc.setQueriesData(
         { queryKey: ["analise-eleitores"] },
-        (old: any) => Array.isArray(old)
-          ? old.map((row: any) => row.id === eleitor.id ? { ...row, ...merge } : row)
-          : old,
+        (old: any) => {
+          if (!old) return old;
+          if (old.rows && Array.isArray(old.rows)) {
+            return {
+              ...old,
+              rows: old.rows.map((row: any) =>
+                row.id === eleitor.id ? { ...row, ...merge } : row,
+              ),
+            };
+          }
+          if (Array.isArray(old)) {
+            return old.map((row: any) =>
+              row.id === eleitor.id ? { ...row, ...merge } : row,
+            );
+          }
+          return old;
+        },
       );
 
       qc.invalidateQueries({ queryKey: ["analise-eleitores"] });
@@ -111,14 +131,24 @@ export default function AnaliseEleitores() {
   const [liderancaId, setLiderancaId] = useState<string>("todas");
   const [caboId, setCaboId] = useState<string>("todos");
   const [tagId, setTagId] = useState<string>("todas");
+  const [page, setPage] = useState(1);
 
-  const qc = useQueryClient();
+  useEffect(() => {
+    setPage(1);
+  }, [search, bairro, liderancaId, caboId, tagId]);
 
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["analise-eleitores", { search, bairro, liderancaId, caboId, tagId }],
+  const { data: lista, isLoading } = useQuery({
+    queryKey: ["analise-eleitores", { search, bairro, liderancaId, caboId, tagId, page }],
     queryFn: () =>
-      analiseService.listarEleitores({ search, bairro, liderancaId, caboId, tagId }),
+      analiseService.listarEleitores({
+        search, bairro, liderancaId, caboId, tagId, page, pageSize: PAGE_SIZE,
+      }),
   });
+  const rows = lista?.rows ?? [];
+  const total = lista?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const inicio = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const fim = Math.min(page * PAGE_SIZE, total);
 
   const { data: liderancas = [] } = useQuery({
     queryKey: ["lookup-liderancas"],
@@ -132,12 +162,10 @@ export default function AnaliseEleitores() {
     queryKey: ["lookup-tags"],
     queryFn: async () => (await sb.from("tags").select("id,nome,cor").order("nome")).data ?? [],
   });
-
-  const bairros = useMemo(() => {
-    const set = new Set<string>();
-    (rows as any[]).forEach((r) => r.bairro && set.add(r.bairro));
-    return Array.from(set).sort();
-  }, [rows]);
+  const { data: bairros = [] } = useQuery({
+    queryKey: ["lookup-bairros-eleitores"],
+    queryFn: () => catalogosService.bairros(),
+  });
 
   const enriquecer = useMutation({
     mutationFn: (eleitor_id: string) => analiseService.enriquecerEleitor({ eleitor_id }),
@@ -214,7 +242,7 @@ export default function AnaliseEleitores() {
         <CardContent className="p-0 overflow-auto">
           {isLoading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Carregando…</div>
-          ) : (rows as any[]).length === 0 ? (
+          ) : rows.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               Nenhum eleitor encontrado.
             </div>
@@ -234,7 +262,7 @@ export default function AnaliseEleitores() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(rows as any[]).map((e) => (
+                {rows.map((e) => (
                   <TableRow
                     key={e.id}
                     className="cursor-pointer hover:bg-muted/40"
@@ -326,6 +354,45 @@ export default function AnaliseEleitores() {
                 ))}
               </TableBody>
             </Table>
+          )}
+          {!isLoading && total > 0 && (
+            <div className="flex flex-col gap-2 border-t border-border px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                Mostrando <span className="font-medium text-foreground">{inicio}</span>
+                {" – "}
+                <span className="font-medium text-foreground">{fim}</span>
+                {" de "}
+                <span className="font-medium text-foreground">{total}</span>
+                {" · Página "}
+                <span className="font-medium text-foreground">{page}</span>
+                {" / "}
+                <span className="font-medium text-foreground">{totalPages}</span>
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={page <= 1}
+                  aria-label="Página anterior"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={page >= totalPages}
+                  aria-label="Próxima página"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

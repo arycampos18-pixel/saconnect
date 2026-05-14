@@ -53,6 +53,45 @@ const mapInteracao = (r: any): InteracaoDep => ({
 });
 
 export const departamentosService = {
+  /** Telefone/CPF já cadastrado como membro neste departamento (tabela `membros` apenas). */
+  async verificarMembroDuplicadoNoDepartamento(
+    departamentoId: string,
+    opts: { telefoneDigits?: string; cpfDigits?: string },
+  ): Promise<{
+    porTelefone: { id: string; nome: string } | null;
+    porCpf: { id: string; nome: string } | null;
+  }> {
+    const tel = (opts.telefoneDigits ?? "").replace(/\D/g, "");
+    const cpf = (opts.cpfDigits ?? "").replace(/\D/g, "");
+    let porTelefone: { id: string; nome: string } | null = null;
+    let porCpf: { id: string; nome: string } | null = null;
+    if (tel.length < 10 && cpf.length !== 11) return { porTelefone: null, porCpf: null };
+
+    const { data, error } = await (supabase as any)
+      .from("membros")
+      .select("id, nome, telefone, cpf")
+      .eq("departamento_id", departamentoId)
+      .limit(2000);
+    if (error) throw error;
+    const rows = (data ?? []) as Array<{ id: string; nome: string; telefone: string | null; cpf: string | null }>;
+
+    const normTel = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+    const normCpf = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+    if (tel.length >= 10) {
+      const hit = rows.find((r) => {
+        const rt = normTel(r.telefone);
+        return rt === tel || (rt.length >= 9 && tel.length >= 9 && rt.slice(-9) === tel.slice(-9));
+      });
+      if (hit) porTelefone = { id: hit.id, nome: hit.nome };
+    }
+    if (cpf.length === 11) {
+      const hit = rows.find((r) => normCpf(r.cpf) === cpf);
+      if (hit) porCpf = { id: hit.id, nome: hit.nome };
+    }
+    return { porTelefone, porCpf };
+  },
+
   async listarDepartamentos(): Promise<DepartamentoGab[]> {
     const { data, error } = await supabase.from("departamentos").select("*").order("created_at", { ascending: false });
     if (error) throw error;

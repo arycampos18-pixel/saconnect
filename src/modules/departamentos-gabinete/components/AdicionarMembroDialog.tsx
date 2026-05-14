@@ -15,10 +15,9 @@ import { Search, Check, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { supabase } from "@/integrations/supabase/client";
 import { depStore } from "../store";
 import type { FuncaoMembro } from "../data/mock";
-import { eleitoresService } from "@/modules/eleitores/services/eleitoresService";
+import { departamentosService } from "../services/departamentosService";
 import { formatPhoneBR, isValidPhoneBR, onlyDigits } from "@/shared/utils/phone";
 import { onlyDigitsCPF } from "@/shared/utils/cpf";
-import { catalogosService, type Tag } from "@/modules/eleitores/services/catalogosService";
 import { CepInput } from "@/shared/components/CepInput";
 import { CpfInput } from "@/shared/components/CpfInput";
 import { isValidCPF } from "@/shared/utils/cpf";
@@ -63,8 +62,6 @@ export function AdicionarMembroDialog({
 }) {
   const [tab, setTab] = useState("eleitor");
   const [novo, setNovo] = useState(novoInicial);
-  const [tagsDisponiveis, setTagsDisponiveis] = useState<Tag[]>([]);
-  const [tagsSel, setTagsSel] = useState<string[]>([]);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [csv, setCsv] = useState<File | null>(null);
 
@@ -104,69 +101,36 @@ export function AdicionarMembroDialog({
     return () => clearTimeout(t);
   }, [busca, tab, open]);
 
-  useEffect(() => {
-    if (!open) return;
-    catalogosService.tags().then(setTagsDisponiveis).catch(() => {});
-  }, [open]);
-
-  // Checagem de duplicidade (telefone + CPF) com debounce + auto-preenchimento
-  const [eleitorExistente, setEleitorExistente] = useState<any | null>(null);
+  // Duplicidade apenas na tabela `membros` deste departamento (sem cruzar com `eleitores`).
   const telDigits = onlyDigits(novo.telefone);
   const cpfDigits = onlyDigitsCPF(novo.cpf);
   const telValido = isValidPhoneBR(novo.telefone);
+  const membroDupTel = !!dupCheck.porTelefone;
+  const membroDupCpf = !!dupCheck.porCpf;
   useEffect(() => {
-    if (tab !== "novo") return;
+    if (tab !== "novo" || !open) return;
     if (telDigits.length < 10 && cpfDigits.length !== 11) {
       setDupCheck({ loading: false, porTelefone: null, porCpf: null });
-      setEleitorExistente(null);
       return;
     }
     let cancelled = false;
     setDupCheck((p) => ({ ...p, loading: true }));
     const t = setTimeout(async () => {
       try {
-        const r = await eleitoresService.checarDuplicidade({
-          telefone: telDigits.length >= 10 ? telDigits : null,
-          cpf: cpfDigits.length === 11 ? cpfDigits : null,
+        const r = await departamentosService.verificarMembroDuplicadoNoDepartamento(departamentoId, {
+          telefoneDigits: telDigits.length >= 10 ? telDigits : undefined,
+          cpfDigits: cpfDigits.length === 11 ? cpfDigits : undefined,
         });
-        if (!cancelled) {
-          setDupCheck({ loading: false, ...r });
-          // Se já cadastrado, busca dados completos para pre-preencher
-          const existId = r.porTelefone?.id ?? r.porCpf?.id;
-          if (existId) {
-            const { data } = await (supabase as any)
-              .from("eleitores")
-              .select("id,nome,telefone,telefone_original,email,cpf,bairro,cidade,uf,rua,numero,complemento,cep,genero,data_nascimento")
-              .eq("id", existId)
-              .maybeSingle();
-            if (!cancelled && data) {
-              setEleitorExistente(data);
-              setNovo((prev) => ({
-                ...prev,
-                nome: data.nome ?? prev.nome,
-                email: data.email ?? prev.email,
-                cpf: data.cpf ?? prev.cpf,
-                bairro: data.bairro ?? prev.bairro,
-                cidade: data.cidade ?? prev.cidade,
-                uf: data.uf ?? prev.uf,
-                rua: data.rua ?? prev.rua,
-                numero: data.numero ?? prev.numero,
-                complemento: data.complemento ?? prev.complemento,
-                cep: data.cep ?? prev.cep,
-                genero: data.genero ?? prev.genero,
-                data_nascimento: data.data_nascimento?.slice(0, 10) ?? prev.data_nascimento,
-              }));
-            }
-          } else {
-            if (!cancelled) setEleitorExistente(null);
-          }
-        }
+        if (!cancelled) setDupCheck({ loading: false, ...r });
       } catch {
         if (!cancelled) setDupCheck({ loading: false, porTelefone: null, porCpf: null });
       }
     }, 400);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [telDigits, cpfDigits, tab]);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [telDigits, cpfDigits, tab, open, departamentoId]);
 
   const adicionarDoEleitor = async () => {
     const e = eleitores.find((x) => x.id === selecionado);
@@ -202,40 +166,15 @@ export function AdicionarMembroDialog({
       toast.error("CPF inválido. Verifique os dígitos verificadores.");
       return;
     }
+    if (dupCheck.porTelefone || dupCheck.porCpf) {
+      toast.error("Este telefone ou CPF já está cadastrado como membro neste departamento.");
+      return;
+    }
+
     setSalvandoNovo(true);
     try {
-      let eleitorId: string;
-
-      if (eleitorExistente) {
-        // Eleitor já existe — usa o ID existente sem criar duplicata
-        eleitorId = eleitorExistente.id;
-      } else {
-      // 1) Cria o eleitor na base
-      eleitorId = await eleitoresService.create({
-        nome: v.nome,
-        telefone: v.telefone,
-        email: v.email || null,
-        cpf: v.cpf || null,
-        data_nascimento: v.data_nascimento || null,
-        genero: v.genero || null,
-        cep: v.cep || null,
-        rua: v.rua || null,
-        numero: v.numero || null,
-        complemento: v.complemento || null,
-        bairro: v.bairro || null,
-        cidade: v.cidade || null,
-        uf: v.uf ? v.uf.toUpperCase() : null,
-        observacoes: v.observacoes || null,
-        origem: "Departamento",
-        consentimento_lgpd: v.consentimento_lgpd,
-        tag_ids: tagsSel,
-      });
-      } // fim do else (eleitor novo)
-
-      // 2) Vincula o eleitor ao departamento como membro
       await depStore.adicionarMembro({
         departamentoId,
-        eleitorId,
         nome: v.nome,
         telefone: v.telefone,
         email: v.email || undefined,
@@ -252,15 +191,11 @@ export function AdicionarMembroDialog({
         observacoes: v.observacoes || undefined,
         funcao: v.funcao,
       });
-      toast.success(eleitorExistente
-        ? `${v.nome} adicionado ao departamento (eleitor já existente).`
-        : "Eleitor cadastrado e adicionado ao departamento.");
+      toast.success("Membro adicionado ao departamento.");
       setNovo(novoInicial);
-      setEleitorExistente(null);
-      setTagsSel([]);
       onOpenChange(false);
     } catch (e: any) {
-      toast.error("Erro ao cadastrar eleitor: " + (e?.message ?? ""));
+      toast.error("Erro ao salvar membro: " + (e?.message ?? ""));
     } finally {
       setSalvandoNovo(false);
     }
@@ -290,7 +225,7 @@ export function AdicionarMembroDialog({
         <DialogHeader>
           <DialogTitle>Adicionar membro</DialogTitle>
           <DialogDescription>
-            Selecione um eleitor existente, cadastre um novo eleitor ou importe uma lista.
+            Vincule alguém da base de eleitores, cadastre um membro só neste departamento (tabela própria, sem ir para a base de eleitores) ou importe CSV.
           </DialogDescription>
         </DialogHeader>
 
@@ -360,18 +295,18 @@ export function AdicionarMembroDialog({
                           ? ""
                           : !telValido
                           ? "border-destructive pr-9"
-                          : dupCheck.porTelefone
-                          ? "border-amber-400 pr-9"
+                          : membroDupTel
+                          ? "border-destructive pr-9"
                           : "border-emerald-500 pr-9"
                       }
                     />
                     <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2">
                       {dupCheck.loading && telDigits.length >= 10 ? (
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      ) : telDigits.length >= 10 && telValido && !dupCheck.porTelefone ? (
+                      ) : telDigits.length >= 10 && telValido && !membroDupTel ? (
                         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      ) : telDigits.length > 0 && dupCheck.porTelefone ? (
-                        <CheckCircle2 className="h-4 w-4 text-amber-500" />
+                      ) : telDigits.length > 0 && membroDupTel ? (
+                        <AlertCircle className="h-4 w-4 text-destructive" />
                       ) : telDigits.length > 0 && !telValido ? (
                         <AlertCircle className="h-4 w-4 text-destructive" />
                       ) : null}
@@ -380,14 +315,14 @@ export function AdicionarMembroDialog({
                   {telDigits.length > 0 && !telValido && (
                     <p className="mt-1 text-xs text-destructive">Telefone inválido (use DDD + número).</p>
                   )}
-                  {telValido && dupCheck.porTelefone && (
-                    <p className="mt-1 text-xs text-amber-600 flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Já cadastrado: <strong>{dupCheck.porTelefone.nome}</strong> — dados preenchidos automaticamente.
+                  {telValido && membroDupTel && dupCheck.porTelefone && (
+                    <p className="mt-1 text-xs text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      Já é membro deste departamento: <strong>{dupCheck.porTelefone.nome}</strong>
                     </p>
                   )}
-                  {telValido && !dupCheck.porTelefone && !dupCheck.loading && telDigits.length >= 10 && (
-                    <p className="mt-1 text-xs text-emerald-600">Telefone válido e disponível.</p>
+                  {telValido && !membroDupTel && !dupCheck.loading && telDigits.length >= 10 && (
+                    <p className="mt-1 text-xs text-emerald-600">Telefone disponível neste departamento.</p>
                   )}
                 </div>
                 <div>
@@ -398,8 +333,8 @@ export function AdicionarMembroDialog({
                   value={novo.cpf}
                   onChange={(v) => setNovo({ ...novo, cpf: v })}
                   error={
-                    cpfDigits.length === 11 && dupCheck.porCpf
-                      ? `CPF já cadastrado: ${dupCheck.porCpf.nome}`
+                    cpfDigits.length === 11 && membroDupCpf && dupCheck.porCpf
+                      ? `CPF já é membro deste departamento: ${dupCheck.porCpf.nome}`
                       : undefined
                   }
                 />
@@ -478,29 +413,6 @@ export function AdicionarMembroDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label>Tags do eleitor</Label>
-                  <div className="flex flex-wrap gap-2 rounded-md border p-2 max-h-24 overflow-y-auto">
-                    {tagsDisponiveis.length === 0 && (
-                      <span className="text-xs text-muted-foreground">Nenhuma tag cadastrada.</span>
-                    )}
-                    {tagsDisponiveis.map((t) => {
-                      const sel = tagsSel.includes(t.id);
-                      return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() =>
-                            setTagsSel((prev) => sel ? prev.filter((x) => x !== t.id) : [...prev, t.id])
-                          }
-                          className={`rounded-full border px-2 py-0.5 text-xs ${sel ? "bg-primary text-primary-foreground border-primary" : "hover:bg-muted"}`}
-                        >
-                          {t.nome}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
               <div>
                 <Label>Observações</Label>
@@ -537,10 +449,11 @@ export function AdicionarMembroDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           {tab === "eleitor" && <Button onClick={adicionarDoEleitor} disabled={!selecionado}>Adicionar eleitor</Button>}
           {tab === "novo" && (
-            <Button onClick={cadastrarNovo} disabled={salvandoNovo}>
-              {salvandoNovo ? "Salvando…"
-                : eleitorExistente ? "Adicionar ao departamento"
-                : "Cadastrar e adicionar"}
+            <Button
+              onClick={cadastrarNovo}
+              disabled={salvandoNovo || membroDupTel || membroDupCpf || dupCheck.loading}
+            >
+              {salvandoNovo ? "Salvando…" : "Adicionar membro"}
             </Button>
           )}
           {tab === "csv" && <Button onClick={importarCSV}>Importar</Button>}
