@@ -8,14 +8,103 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, UserPlus, UserCog, KeyRound, Pencil } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Loader2, UserPlus, UserCog, KeyRound, Pencil, Star } from "lucide-react";
 import { toast } from "sonner";
 import { useCompany } from "../contexts/CompanyContext";
-import { settingsService } from "../services/settingsService";
+import { settingsService, type UserCompanyLink } from "../services/settingsService";
 import { NovoUsuarioForm } from "@/modules/cadastros/components/NovoUsuarioForm";
 import { authService } from "@/modules/auth/services/authService";
 import { supabase } from "@/integrations/supabase/client";
 import { Label } from "@/components/ui/label";
+
+function EditUserCompanyLinkRow({
+  userId,
+  link,
+  onChanged,
+}: {
+  userId: string;
+  link: UserCompanyLink;
+  onChanged: () => void;
+}) {
+  const companyId = link.company_id;
+  const nomeEmpresa = link.settings_companies?.nome_fantasia ?? companyId.slice(0, 8);
+
+  const { data: rowPerfis = [], isLoading } = useQuery({
+    queryKey: ["settings_profiles", companyId],
+    queryFn: () => settingsService.listarPerfis(companyId),
+    enabled: !!companyId,
+  });
+
+  async function setProfile(profileId: string) {
+    try {
+      await settingsService.vincularUsuarioEmpresa(userId, companyId, profileId);
+      toast.success("Perfil atualizado nesta empresa.");
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao atualizar perfil");
+    }
+  }
+
+  async function setPadrao() {
+    try {
+      await settingsService.definirEmpresaPadraoDoUsuario(userId, companyId);
+      toast.success("Empresa padrão definida.");
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao definir padrão");
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm(`Remover acesso a "${nomeEmpresa}" para este usuário?`)) return;
+    try {
+      await settingsService.desvincularUsuario(userId, companyId);
+      toast.success("Vínculo removido.");
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao remover vínculo");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="min-w-[140px] flex-1 font-medium text-sm">{nomeEmpresa}</div>
+      <div className="flex flex-wrap items-center gap-2">
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : (
+          <Select value={link.profile_id ?? ""} onValueChange={setProfile}>
+            <SelectTrigger className="h-8 w-[160px]">
+              <SelectValue placeholder="Perfil" />
+            </SelectTrigger>
+            <SelectContent>
+              {rowPerfis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {link.is_default ? (
+          <Badge variant="secondary" className="gap-1">
+            <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+            Padrão
+          </Badge>
+        ) : (
+          <Button type="button" size="sm" variant="outline" onClick={setPadrao}>
+            <Star className="mr-1 h-3.5 w-3.5" />
+            Padrão
+          </Button>
+        )}
+        <Button type="button" size="sm" variant="destructive" onClick={remove}>
+          Remover
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function UsersManager() {
   const { currentCompany, hasPermission } = useCompany();
@@ -30,6 +119,8 @@ export default function UsersManager() {
   const [editNome, setEditNome] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [addCompanyId, setAddCompanyId] = useState("");
+  const [addProfileId, setAddProfileId] = useState("");
 
   const canManage = hasPermission("settings.users.manage");
 
@@ -44,10 +135,57 @@ export default function UsersManager() {
     enabled: !!currentCompany,
   });
 
-  const filtered = (links as any[]).filter((l) =>
-    !busca ||
-    l.settings_users?.nome?.toLowerCase().includes(busca.toLowerCase()) ||
-    l.settings_users?.email?.toLowerCase().includes(busca.toLowerCase())
+  const editUserId = editCadastro?.userId;
+
+  const { data: userCompanyLinks = [], refetch: refetchUserCompanyLinks } = useQuery({
+    queryKey: ["settings_user_company_links_edit", editUserId],
+    queryFn: () => (editUserId ? settingsService.listarEmpresasDoUsuario(editUserId) : []),
+    enabled: !!editUserId,
+  });
+
+  const { data: empresasParaVinculo = [] } = useQuery({
+    queryKey: ["settings_companies_users_manager"],
+    queryFn: () => settingsService.listarEmpresas(),
+    enabled: !!editCadastro && canManage,
+  });
+
+  const { data: perfisNovaEmpresa = [] } = useQuery({
+    queryKey: ["settings_profiles", addCompanyId],
+    queryFn: () => (addCompanyId ? settingsService.listarPerfis(addCompanyId) : []),
+    enabled: !!addCompanyId && !!editCadastro,
+  });
+
+  const empresasDisponiveisParaAdicionar = empresasParaVinculo.filter(
+    (c) => !userCompanyLinks.some((l) => l.company_id === c.id && l.status === "active"),
+  );
+
+  function invalidateAposVinculos() {
+    void refetchUserCompanyLinks();
+    qc.invalidateQueries({ queryKey: ["settings_company_users"] });
+    qc.invalidateQueries({ queryKey: ["settings_user_company_global"] });
+  }
+
+  async function adicionarVinculoEmpresa() {
+    if (!editCadastro || !addCompanyId || !addProfileId) {
+      toast.error("Selecione empresa e perfil.");
+      return;
+    }
+    try {
+      await settingsService.vincularUsuarioEmpresa(editCadastro.userId, addCompanyId, addProfileId);
+      toast.success("Empresa vinculada.");
+      setAddCompanyId("");
+      setAddProfileId("");
+      invalidateAposVinculos();
+    } catch (e: any) {
+      toast.error(e.message ?? "Erro ao vincular empresa");
+    }
+  }
+
+  const filtered = (links as any[]).filter(
+    (l) =>
+      !busca ||
+      l.settings_users?.nome?.toLowerCase().includes(busca.toLowerCase()) ||
+      l.settings_users?.email?.toLowerCase().includes(busca.toLowerCase()),
   );
 
   async function alterarPerfil(userId: string, profileId: string) {
@@ -79,6 +217,8 @@ export default function UsersManager() {
   }
 
   function abrirEditarCadastro(l: { user_id: string; settings_users?: { nome?: string; email?: string } }) {
+    setAddCompanyId("");
+    setAddProfileId("");
     setEditCadastro({
       userId: l.user_id,
       nome: l.settings_users?.nome ?? "",
@@ -106,6 +246,8 @@ export default function UsersManager() {
       });
       toast.success("Cadastro atualizado.");
       setEditCadastro(null);
+      setAddCompanyId("");
+      setAddProfileId("");
       qc.invalidateQueries({ queryKey: ["settings_company_users", currentCompany?.id] });
     } catch (e: any) {
       toast.error(e.message ?? "Não foi possível salvar (verifique permissões).");
@@ -264,10 +406,12 @@ export default function UsersManager() {
             setEditCadastro(null);
             setEditNome("");
             setEditEmail("");
+            setAddCompanyId("");
+            setAddProfileId("");
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar cadastro do usuário</DialogTitle>
           </DialogHeader>
@@ -285,12 +429,89 @@ export default function UsersManager() {
               <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} autoComplete="email" />
             </div>
           </div>
+
+          <Separator className="my-4" />
+
+          <div className="space-y-3">
+            <Label className="text-base">Empresas com acesso</Label>
+            <p className="text-sm text-muted-foreground">
+              Cada vínculo define em que empresa o utilizador entra e com que perfil (permissões). Pode haver várias
+              empresas. A marcada como <strong>padrão</strong> é usada ao iniciar sessão quando aplicável.
+            </p>
+            {userCompanyLinks.filter((l) => l.status === "active").length === 0 ? (
+              <p className="text-sm text-amber-700 dark:text-amber-400">Nenhum vínculo ativo. Adicione uma empresa abaixo.</p>
+            ) : (
+              <div className="space-y-2">
+                {userCompanyLinks
+                  .filter((l) => l.status === "active")
+                  .map((link) => (
+                    <EditUserCompanyLinkRow
+                      key={link.company_id}
+                      userId={editCadastro!.userId}
+                      link={link}
+                      onChanged={invalidateAposVinculos}
+                    />
+                  ))}
+              </div>
+            )}
+
+            <div className="rounded-md border border-dashed p-3 space-y-3">
+              <Label className="text-sm font-medium">Vincular outra empresa</Label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="min-w-[180px] flex-1 space-y-1">
+                  <span className="text-xs text-muted-foreground">Empresa</span>
+                  {empresasDisponiveisParaAdicionar.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">
+                      Todas as empresas que você pode gerir já estão vinculadas, ou não há permissão para listar outras.
+                    </p>
+                  ) : (
+                    <Select
+                      value={addCompanyId || undefined}
+                      onValueChange={(v) => {
+                        setAddCompanyId(v);
+                        setAddProfileId("");
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolher empresa…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {empresasDisponiveisParaAdicionar.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.nome_fantasia}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+                <div className="min-w-[160px] flex-1 space-y-1">
+                  <span className="text-xs text-muted-foreground">Perfil nesta empresa</span>
+                  <Select value={addProfileId || undefined} onValueChange={setAddProfileId} disabled={!addCompanyId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={addCompanyId ? "Perfil…" : "—"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {perfisNovaEmpresa.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="button" onClick={adicionarVinculoEmpresa} disabled={!addCompanyId || !addProfileId}>
+                  Adicionar vínculo
+                </Button>
+              </div>
+            </div>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditCadastro(null)}>
-              Cancelar
+              Fechar
             </Button>
             <Button onClick={salvarCadastroUsuario} disabled={editSaving}>
-              {editSaving ? "Salvando…" : "Salvar"}
+              {editSaving ? "Salvando…" : "Salvar nome e e-mail"}
             </Button>
           </DialogFooter>
         </DialogContent>
