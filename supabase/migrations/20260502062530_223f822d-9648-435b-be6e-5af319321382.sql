@@ -1,3 +1,5 @@
+-- crypt / gen_salt vêm do pgcrypto (Supabase: schema extensions)
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 DO $$
 DECLARE
@@ -20,7 +22,7 @@ BEGIN
       'authenticated',
       'authenticated',
       'admin@saconnect.com',
-      crypt('Admin@123456', gen_salt('bf')),
+      extensions.crypt('Admin@123456', extensions.gen_salt('bf')),
       now(), now(), now(),
       '{"provider":"email","providers":["email"]}'::jsonb,
       jsonb_build_object('nome','Administrador','cargo','Administrador'),
@@ -41,7 +43,7 @@ BEGIN
   ELSE
     new_user_id := existing_user_id;
     UPDATE auth.users
-      SET encrypted_password = crypt('Admin@123456', gen_salt('bf')),
+      SET encrypted_password = extensions.crypt('Admin@123456', extensions.gen_salt('bf')),
           email_confirmed_at = COALESCE(email_confirmed_at, now()),
           updated_at = now()
       WHERE id = new_user_id;

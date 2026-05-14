@@ -122,6 +122,49 @@ INSERT INTO public.settings_permissions (id, module, description) VALUES
   ('cabos.interacoes',     'Cabos',      'Registrar interações com eleitores')
 ON CONFLICT (id) DO NOTHING;
 
+-- Helpers referenciados abaixo (não existiam noutras migrations).
+CREATE OR REPLACE FUNCTION public.criar_perfil_em_todas_empresas(p_nome text, p_descricao text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.settings_profiles (company_id, nome, descricao, is_system_default)
+  SELECT c.id, p_nome, p_descricao, true
+  FROM public.settings_companies c
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.settings_profiles p
+    WHERE p.company_id = c.id AND p.nome = p_nome
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.definir_permissoes_perfil_global(p_perfil_nome text, p_perm_ids text[])
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  c RECORD;
+  pid uuid;
+  perm text;
+BEGIN
+  FOR c IN SELECT id AS company_id FROM public.settings_companies LOOP
+    SELECT p.id INTO pid FROM public.settings_profiles p
+    WHERE p.company_id = c.company_id AND p.nome = p_perfil_nome
+    LIMIT 1;
+    IF pid IS NULL THEN CONTINUE; END IF;
+    FOREACH perm IN ARRAY p_perm_ids LOOP
+      INSERT INTO public.settings_profile_permissions (profile_id, permission_id)
+      VALUES (pid, perm)
+      ON CONFLICT (profile_id, permission_id) DO NOTHING;
+    END LOOP;
+  END LOOP;
+END;
+$$;
+
 SELECT public.criar_perfil_em_todas_empresas('Liderança', 'Controla cabos eleitorais e eleitores da sua região');
 SELECT public.definir_permissoes_perfil_global(
   'Liderança',

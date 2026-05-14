@@ -13,18 +13,23 @@ SET telefone = regexp_replace(telefone, '\D', '', 'g')
 WHERE telefone IS NOT NULL
   AND telefone <> regexp_replace(telefone, '\D', '', 'g');
 
--- Remove possíveis duplicatas já existentes, mantendo o mais antigo
+-- Remove possíveis duplicatas já existentes, mantendo o mais antigo (ROW_NUMBER evita requisitos estritos do DISTINCT ON)
 DELETE FROM public.liderancas l
-WHERE id NOT IN (
-  SELECT DISTINCT ON (company_id, regexp_replace(coalesce(telefone,''), '\D', '', 'g'))
-    id
-  FROM public.liderancas
-  WHERE telefone IS NOT NULL AND telefone <> ''
-  ORDER BY company_id,
-           regexp_replace(telefone, '\D', '', 'g'),
-           created_at ASC
-)
-AND telefone IS NOT NULL AND telefone <> '';
+WHERE l.id IN (
+  SELECT id
+  FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (
+             PARTITION BY company_id,
+                          regexp_replace(coalesce(telefone, ''), '\D', '', 'g')
+             ORDER BY created_at ASC NULLS LAST, id ASC
+           ) AS rn
+    FROM public.liderancas
+    WHERE telefone IS NOT NULL
+      AND trim(telefone) <> ''
+  ) d
+  WHERE d.rn > 1
+);
 
 -- Índice UNIQUE parcial: só aplica quando telefone não é nulo/vazio
 CREATE UNIQUE INDEX IF NOT EXISTS uq_liderancas_company_telefone

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.membros (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   departamento_id UUID NOT NULL REFERENCES public.departamentos(id) ON DELETE CASCADE,
   eleitor_id      UUID REFERENCES public.eleitores(id) ON DELETE SET NULL,
-  company_id      UUID REFERENCES public.companies(id) ON DELETE CASCADE,
+  company_id      UUID REFERENCES public.settings_companies(id) ON DELETE CASCADE,
 
   nome            TEXT NOT NULL,
   telefone        TEXT,
@@ -42,21 +42,21 @@ CREATE INDEX IF NOT EXISTS idx_membros_telefone     ON public.membros (telefone)
 
 ALTER TABLE public.membros ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "membros_company_policy" ON public.membros;
 CREATE POLICY "membros_company_policy" ON public.membros
   FOR ALL TO authenticated
   USING (
     company_id IS NULL OR
-    company_id IN (
-      SELECT company_id FROM public.user_companies WHERE user_id = auth.uid()
-    )
+    public.is_super_admin(auth.uid()) OR
+    public.user_belongs_to_company(auth.uid(), company_id)
   )
   WITH CHECK (
     company_id IS NULL OR
-    company_id IN (
-      SELECT company_id FROM public.user_companies WHERE user_id = auth.uid()
-    )
+    public.is_super_admin(auth.uid()) OR
+    public.user_belongs_to_company(auth.uid(), company_id)
   );
 
+DROP TRIGGER IF EXISTS trg_membros_updated_at ON public.membros;
 CREATE TRIGGER trg_membros_updated_at
   BEFORE UPDATE ON public.membros
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -71,7 +71,7 @@ INSERT INTO public.membros (
 SELECT
   id, departamento_id, eleitor_id, company_id,
   nome, telefone, email, cpf, bairro,
-  COALESCE(funcao, 'membro'), COALESCE(status, 'ativo'), observacoes,
+  COALESCE(funcao, 'membro'), COALESCE(status, 'ativo'), NULL::text,
   COALESCE(entrou_em, created_at), created_at, updated_at
 FROM public.departamento_membros
 ON CONFLICT (id) DO NOTHING;

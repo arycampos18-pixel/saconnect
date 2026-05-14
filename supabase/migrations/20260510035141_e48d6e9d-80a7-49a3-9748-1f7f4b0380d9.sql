@@ -48,12 +48,25 @@ GRANT EXECUTE ON FUNCTION public.mask_cpf(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.pesquisa_ja_respondeu(uuid, text) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.template_registrar_uso(uuid) TO authenticated;
 
--- Public-form RPCs: keep accessible to anon + authenticated
-GRANT EXECUTE ON FUNCTION public.public_submit_eleitor(text, text, text, text, text, text, text, text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.public_submit_cabo_link(text, text, text, text, text, text, text, text, text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.public_submit_department_qrcode(text, text, text, jsonb, text, text, date, text, text, text, text, text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.public_get_cabo_link(text) TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.public_get_department_qrcode(text) TO anon, authenticated;
+-- Public-form RPCs: GRANT só se a função existir (evita falha em installs sem essas RPCs)
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN
+    SELECT p.oid::regprocedure::text AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN (
+        'public_submit_eleitor',
+        'public_submit_cabo_link',
+        'public_submit_department_qrcode',
+        'public_get_cabo_link',
+        'public_get_department_qrcode'
+      )
+  LOOP
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO anon, authenticated', r.sig);
+  END LOOP;
+END $$;
 
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace

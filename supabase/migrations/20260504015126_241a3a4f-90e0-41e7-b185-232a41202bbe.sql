@@ -24,7 +24,8 @@ END $$;
 DO $$
 DECLARE
   t TEXT;
-  default_company UUID := 'e0df4e88-5055-4c1f-9223-94a5932eae83';
+  -- Empresa criada em 20260504005750 (gen_random_uuid); nunca usar UUID fixo de outro ambiente.
+  default_company UUID;
   political_tables TEXT[] := ARRAY[
     'eleitores','eleitor_tags','tags','liderancas','cabos_eleitorais',
     'crm_etapas','crm_oportunidades','crm_interacoes','crm_tarefas',
@@ -37,6 +38,21 @@ DECLARE
     'aniversariantes_config','aniversariantes_log','posts_sociais'
   ];
 BEGIN
+  SELECT id INTO default_company FROM public.settings_companies
+  WHERE nome_fantasia = 'SA CONNECT'
+  ORDER BY created_at ASC
+  LIMIT 1;
+
+  IF default_company IS NULL THEN
+    SELECT id INTO default_company FROM public.settings_companies
+    ORDER BY created_at ASC
+    LIMIT 1;
+  END IF;
+
+  IF default_company IS NULL THEN
+    RAISE EXCEPTION 'settings_companies vazio — a migration 20260504005750 deve ser aplicada antes desta';
+  END IF;
+
   FOREACH t IN ARRAY political_tables LOOP
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=t) THEN
       EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES public.settings_companies(id) ON DELETE CASCADE', t);
