@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { metaService, MetaSession } from "@/modules/whatsapp-meta/services/whatsappMetaService";
 import { toast } from "sonner";
 import { Copy, ExternalLink, Plus, Trash2, RefreshCw } from "lucide-react";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 const statusVariant = (s: string) => {
   if (s === "verified" || s === "active") return "default";
@@ -79,7 +80,7 @@ export default function MetaSessions() {
       toast.error("Defina o App ID antes de iniciar o OAuth");
       return;
     }
-    const redirect = `${window.location.origin}/app/wa-meta/oauth-callback`;
+    const redirect = `${publicAppOrigin()}/app/wa-meta/oauth-callback`;
     sessionStorage.setItem("meta_oauth_session_id", session.id);
     sessionStorage.setItem("meta_oauth_redirect", redirect);
     window.location.href = metaService.buildOAuthUrl(session.app_id, redirect, session.id);

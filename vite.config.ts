@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => {
     VITE_SUPABASE_PROJECT_ID: env.VITE_SUPABASE_PROJECT_ID || "ktwdgnkurtalclsgxfov",
     // Proxy path para OTP da pesquisa pública. Vazio = chama Supabase direto (pode falhar por CORS/rede).
     VITE_PUBLIC_OTP_SEND_URL: env.VITE_PUBLIC_OTP_SEND_URL || "",
+    // URL pública do site (ex.: https://saconnect.net.br) — links de pesquisa, cadastro público, auth.
+    VITE_PUBLIC_APP_URL: env.VITE_PUBLIC_APP_URL || "",
   };
 
   const supabaseOrigin = (publicEnv.VITE_SUPABASE_URL || "").replace(/\/$/, "");

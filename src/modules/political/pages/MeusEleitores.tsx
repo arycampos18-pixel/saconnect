@@ -18,6 +18,7 @@ import { hierarquiaDashboardService } from "../services/hierarquiaDashboardServi
 import { metasGamificacaoService } from "../services/metasGamificacaoService";
 import { Progress } from "@/components/ui/progress";
 import { Award, Target } from "lucide-react";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, Legend,
@@ -82,7 +83,7 @@ export default function MeusEleitores() {
     return <VotersList />;
   }
 
-  const baseUrl = window.location.origin;
+  const baseUrl = publicAppOrigin();
   const linkUrl = (token: string) => `${baseUrl}/cabo/r/${token}`;
 
   async function cadastrarManual() {

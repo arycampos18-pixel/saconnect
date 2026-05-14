@@ -111,9 +111,11 @@ export default function Login() {
 
     setLoading(true);
     let authError: { message?: string } | null = null;
+    let signInFailureKind: "credentials" | "profile" | "inactive" | undefined;
     try {
       const res = await authService.signIn(parsed.data.email, parsed.data.password);
       authError = res.error ?? null;
+      signInFailureKind = res.signInFailureKind;
     } catch (err) {
       authLog("error", "login.signin_exception", {
         message: err instanceof Error ? err.message : String(err),
@@ -127,8 +129,21 @@ export default function Login() {
     setLoading(false);
 
     if (authError) {
-      authLog("warn", "login.signin_failed", { message: authError.message });
-      // Mensagem genérica — não revela se o e-mail existe ou não
+      authLog("warn", "login.signin_failed", {
+        message: authError.message,
+        kind: signInFailureKind,
+      });
+      if (signInFailureKind === "inactive") {
+        setError(authError.message ?? "Conta inativa.");
+        return;
+      }
+      if (signInFailureKind === "profile") {
+        setError(
+          "Login autenticado, mas não foi possível carregar seu perfil. Recarregue a página, limpe o cache do site ou contate o suporte.",
+        );
+        return;
+      }
+      // credentials — mensagem genérica (não revela se o e-mail existe)
       const next = attempts + 1;
       setAttempts(next);
       if (next >= MAX_ATTEMPTS) {

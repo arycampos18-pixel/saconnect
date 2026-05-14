@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 type Formulario = {
   id: string;
@@ -63,7 +64,7 @@ export default function FormulariosPublicosPanel() {
   };
 
   const publicUrl = (token: string) =>
-    `${window.location.origin}/formulario/${token}`;
+    `${publicAppOrigin()}/formulario/${token}`;
 
   return (
     <Card>

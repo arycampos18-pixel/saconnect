@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { metaService, MetaSession } from "@/modules/whatsapp-meta/services/whatsappMetaService";
 import { toast } from "sonner";
 import { Copy, ExternalLink, ShieldCheck, Plug, KeyRound, Webhook, CheckCircle2, AlertTriangle } from "lucide-react";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const WEBHOOK_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/whatsapp-meta-webhook`;
@@ -55,7 +56,7 @@ export default function MetaConnect() {
   });
   const [saving, setSaving] = useState(false);
 
-  const redirectUri = `${window.location.origin}/app/wa-meta/oauth-callback`;
+  const redirectUri = `${publicAppOrigin()}/app/wa-meta/oauth-callback`;
 
   const fillFromSelected = (s?: MetaSession) => {
     if (!s) return;

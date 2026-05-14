@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { authLog } from "@/modules/auth/utils/authLogger";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 export type SignUpInput = {
   nome: string;
@@ -9,8 +10,14 @@ export type SignUpInput = {
   cargo?: string;
 };
 
+export type SignInFailureKind = "credentials" | "profile" | "inactive";
+
+export type SignInResult = Awaited<ReturnType<typeof supabase.auth.signInWithPassword>> & {
+  signInFailureKind?: SignInFailureKind;
+};
+
 export const authService = {
-  async signIn(email: string, password: string) {
+  async signIn(email: string, password: string): Promise<SignInResult> {
     authLog("info", "signIn.attempt", { email });
     const result = await supabase.auth.signInWithPassword({ email, password });
 
@@ -20,7 +27,7 @@ export const authService = {
         message: result.error?.message,
         status: (result.error as { status?: number } | null)?.status,
       });
-      return result;
+      return { ...result, signInFailureKind: "credentials" };
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -33,8 +40,9 @@ export const authService = {
       authLog("error", "signIn.profile_error", { message: profileError.message });
       await supabase.auth.signOut();
       return {
-        data: result.data,
+        ...result,
         error: profileError,
+        signInFailureKind: "profile",
       };
     }
 
@@ -42,8 +50,9 @@ export const authService = {
       authLog("warn", "signIn.inactive_user", { userId: result.data.user.id });
       await supabase.auth.signOut();
       return {
-        data: result.data,
+        ...result,
         error: new Error("Usuário inativo. Procure um administrador para reativar seu acesso."),
+        signInFailureKind: "inactive",
       };
     }
 
@@ -52,7 +61,7 @@ export const authService = {
   },
 
   async signUp({ nome, email, password, telefone, cargo }: SignUpInput) {
-    const redirectUrl = `${window.location.origin}/app`;
+    const redirectUrl = `${publicAppOrigin()}/app`;
     return await supabase.auth.signUp({
       email,
       password,
@@ -88,7 +97,7 @@ export const authService = {
   },
 
   async resetPassword(email: string) {
-    const redirectTo = `${window.location.origin}/reset-password`;
+    const redirectTo = `${publicAppOrigin()}/reset-password`;
     return await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   },
 

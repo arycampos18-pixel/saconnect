@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { normalizarTelefoneDigitsBR } from "../_shared/telefone-brasil.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,7 +161,7 @@ Deno.serve(async (req: Request) => {
     const phoneRaw: string = payload?.phone || payload?.from || payload?.author || "";
     // Normaliza sempre para formato completo com código de país BR (55)
     // ex.: "62999999999" → "5562999999999" | "5562999999999" → "5562999999999"
-    const phoneDigits = normalizarTelefone(phoneRaw);
+    const phoneDigits = normalizarTelefoneDigitsBR(phoneRaw);
 
     if (!phoneDigits) {
       await markRawProcessed(admin, rawId, null, null, "no phone");
@@ -274,7 +275,7 @@ Deno.serve(async (req: Request) => {
       const { data: created } = await admin
         .from("whatsapp_conversas")
         .insert({
-          telefone: phoneRaw || phoneDigits,
+          telefone: `+${phoneDigits}`,
           telefone_digits: phoneDigits,
           contato_nome: senderName,
           status: "Pendente",
@@ -381,43 +382,6 @@ function ok(body: Record<string, unknown>) {
  * Detecta extensão a partir do Content-Type ou do nome original do ficheiro.
  * Cobre todos os formatos relevantes para WhatsApp.
  */
-/**
- * Normaliza o número para dígitos com prefixo 55 (Brasil), formato canónico.
- *
- * Reforma do 9 dígito (Brazil):
- *  - Celulares brasileiros passaram de 8 para 9 dígitos (DDD + 9 + 8 dígitos).
- *  - Z-API pode enviar o número com ou sem o 9 inicial nos celulares.
- *  - Esta função garante o formato correcto: 55 + DDD(2) + 9 + 8dígitos = 13 dígitos.
- */
-function normalizarTelefone(raw: string): string {
-  let digits = raw.replace(/\D/g, "");
-  if (!digits) return digits;
-
-  // Remove prefixo 55 temporariamente para trabalhar com o número local
-  if (digits.startsWith("55") && digits.length > 11) digits = digits.slice(2);
-
-  // Número local:
-  //  11 dígitos = DDD(2) + 9 + 8 dígitos → correcto (celular com 9)
-  //  10 dígitos = DDD(2) + 8 dígitos → pode ser celular sem o 9 ou fixo
-  if (digits.length === 10) {
-    const ddd = digits.slice(0, 2);
-    const rest = digits.slice(2); // 8 dígitos
-    // Celulares brasileiros começam com 6,7,8,9 após o DDD.
-    // Se começar com 9 já está correctamente sem o "nono dígito" extra;
-    // Se não começar com 9 (ex.: 8xxx,7xxx) pode ser fixo — mantemos.
-    // A reforma adicionou 9 ANTES do número móvel existente: 8877-xxxx → 9 8877-xxxx.
-    // Portanto, se o número tem 8 dígitos e é mobile (começa com ≥6), adicionar 9.
-    const firstDigit = parseInt(rest[0], 10);
-    if (firstDigit >= 6) {
-      // Provavelmente celular sem o nono dígito — adiciona 9
-      digits = ddd + "9" + rest;
-    }
-    // Fixo (começa com 2,3,4,5) → mantém 10 dígitos
-  }
-
-  return "55" + digits;
-}
-
 function guessExt(ct: string, originalName?: string | null): string | null {
   // Tenta pelo nome original primeiro
   if (originalName) {

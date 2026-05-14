@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { normalizarTelefoneDigitsBR } from "../_shared/telefone-brasil.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,15 +97,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Z-API exige número apenas com dígitos (DDI+DDD+numero).
-    // Normaliza para o formato brasileiro: se vier sem o DDI 55 (10 ou 11 dígitos), prefixa.
-    const normalizePhoneBR = (raw: string) => {
-      const d = raw.replace(/\D/g, "");
-      if (d.length === 10 || d.length === 11) return `55${d}`;
-      if (d.length === 12 || d.length === 13) return d;
-      return d;
-    };
-    const phone = normalizePhoneBR(to);
+    // Z-API: dígitos DDI+DDD+número — mesma normalização do webhook (nono dígito).
+    const phone = normalizarTelefoneDigitsBR(to);
 
     // Verifica se o número tem WhatsApp ativo antes de enviar (evita "Enviado" silencioso).
     try {

@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useCan } from "@/shared/auth/useCan";
 import { supabase } from "@/integrations/supabase/client";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 function formatPhone(v: string) {
   const d = v.replace(/\D/g, "").slice(0, 11);
@@ -48,7 +49,7 @@ export function NovoEleitorMenu() {
       toast.error((data as any)?.error ?? error?.message ?? "Falha ao gerar link");
       return null;
     }
-    return `${window.location.origin}/cadastro-publico?token=${(data as any).token}`;
+    return `${publicAppOrigin()}/cadastro-publico?token=${(data as any).token}`;
   }
 
   async function abrirLink() {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { campanhasService, type PreviewSegmento } from "../services/campanhasService";
 import { segmentacaoService, type Segmento, type SegmentoFiltros } from "@/modules/segmentacao/services/segmentacaoService";
+import { departamentosService } from "@/modules/departamentos-gabinete/services/departamentosService";
+import type { DepartamentoGab } from "@/modules/departamentos-gabinete/data/mock";
 import { Users, Phone, Mail, ShieldCheck, Send, Search, Check, ChevronsUpDown, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -102,6 +104,7 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
     bairros: string[]; cidades: string[]; origens: string[];
     tags: { id: string; nome: string; cor: string }[];
   }>({ bairros: [], cidades: [], origens: [], tags: [] });
+  const [departamentos, setDepartamentos] = useState<DepartamentoGab[]>([]);
   const [filtros, setFiltros] = useState<SegmentoFiltros>({});
   const [nome, setNome] = useState("");
   const [canal, setCanal] = useState<"WhatsApp" | "SMS" | "Email">("WhatsApp");
@@ -114,9 +117,14 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
   useEffect(() => {
     if (open) {
       setLoadingSeg(true);
-      Promise.all([segmentacaoService.listar(), segmentacaoService.opcoesDisponiveis()])
-        .then(([segs, ops]) => {
+      Promise.all([
+        segmentacaoService.listar(),
+        segmentacaoService.opcoesDisponiveis(),
+        departamentosService.listarDepartamentos().catch(() => [] as DepartamentoGab[]),
+      ])
+        .then(([segs, ops, deps]) => {
           setSegmentos(segs);
+          setDepartamentos((deps ?? []).filter((d) => d.status === "Ativo"));
           setOpcoes({
             bairros: ops.bairros, cidades: ops.cidades, origens: ops.origens,
             tags: ops.tags,
@@ -189,6 +197,22 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
   };
 
   const segSelecionado = segmentos.find((s) => s.id === segmentoId);
+
+  /** Departamentos do gabinete + valores já usados em `eleitores.origem` (o filtro segmenta por esse campo). */
+  const opcoesDepartamentoOuOrigem = useMemo(() => {
+    const fromDeps = departamentos.map((d) => ({ value: d.nome.trim(), label: d.nome.trim() }));
+    const fromOrigem = opcoes.origens.map((o) => ({ value: o.trim(), label: o.trim() }));
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const x of [...fromDeps, ...fromOrigem]) {
+      const k = x.value;
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push({ value: k, label: x.label });
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [departamentos, opcoes.origens]);
+
   const toggleArr = (key: keyof SegmentoFiltros, val: string) => {
     setFiltros((prev) => {
       const cur = (prev[key] as string[] | undefined) ?? [];
@@ -284,7 +308,15 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
                 <MultiSelect label="Bairros" options={opcoes.bairros.map((b) => ({ value: b, label: b }))} selected={filtros.bairros ?? []} onToggle={(v) => toggleArr("bairros", v)} />
                 <MultiSelect label="Cidades" options={opcoes.cidades.map((c) => ({ value: c, label: c }))} selected={filtros.cidades ?? []} onToggle={(v) => toggleArr("cidades", v)} />
                 <MultiSelect label="Tags" options={opcoes.tags.map((t) => ({ value: t.id, label: t.nome, color: t.cor }))} selected={filtros.tags ?? []} onToggle={(v) => toggleArr("tags", v)} />
-                <MultiSelect label="Origens (departamentos)" options={opcoes.origens.map((o) => ({ value: o, label: o }))} selected={filtros.origens ?? []} onToggle={(v) => toggleArr("origens", v)} />
+                <MultiSelect
+                  label="Departamentos"
+                  options={opcoesDepartamentoOuOrigem}
+                  selected={filtros.origens ?? []}
+                  onToggle={(v) => toggleArr("origens", v)}
+                />
+                <p className="text-[11px] text-muted-foreground -mt-1">
+                  Filtra pelo campo <strong>origem</strong> do eleitor (use o mesmo nome do departamento na ficha do eleitor para coincidir).
+                </p>
               </TabsContent>
             </Tabs>
           </div>

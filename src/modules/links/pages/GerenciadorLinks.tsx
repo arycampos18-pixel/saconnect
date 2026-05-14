@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/modules/settings/contexts/CompanyContext";
 import { encurtarUrl } from "@/shared/utils/urlShortener";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 const sb: any = supabase;
 
@@ -80,7 +81,7 @@ export default function GerenciadorLinks() {
     destino: "", telefone: "", mensagem: "", token_ref: "",
   });
 
-  const urlBase = `${window.location.origin}`;
+  const urlBase = publicAppOrigin();
 
   const urlDoLink = (link: LinkCurto) => {
     const prefix = link.tipo === "whatsapp" ? "/w/" : "/l/";
@@ -222,7 +223,7 @@ export default function GerenciadorLinks() {
                         <div>
                           <p className="text-xs font-medium">{link.titulo ?? link.codigo}</p>
                           <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-mono text-blue-600 hover:underline">
-                            {url.replace(window.location.origin, "")}
+                            {url.replace(urlBase, "")}
                           </a>
                         </div>
                       </TableCell>

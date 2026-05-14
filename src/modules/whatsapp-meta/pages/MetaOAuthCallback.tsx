@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { metaService } from "@/modules/whatsapp-meta/services/whatsappMetaService";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 export default function MetaOAuthCallback() {
   const navigate = useNavigate();
@@ -14,7 +15,7 @@ export default function MetaOAuthCallback() {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
       const sessionId = state ?? sessionStorage.getItem("meta_oauth_session_id");
-      const redirect = sessionStorage.getItem("meta_oauth_redirect") ?? `${window.location.origin}/app/wa-meta/oauth-callback`;
+      const redirect = sessionStorage.getItem("meta_oauth_redirect") ?? `${publicAppOrigin()}/app/wa-meta/oauth-callback`;
       if (!code || !sessionId) {
         setMsg("Código ou sessão ausente.");
         return;

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { normalizarTelefoneDigitsBR, telefoneE164Br } from "@/lib/telefoneBrasil";
 
 export type ConversaStatus = "Pendente" | "Em atendimento" | "Atendido";
 export type MensagemDirecao = "entrada" | "saida";
@@ -205,10 +206,11 @@ export const atendimentoService = {
   },
 
   async iniciarConversaManual(input: { telefone: string; nome?: string | null; eleitorId?: string | null }) {
-    const digits = (input.telefone || "").replace(/\D/g, "");
-    if (digits.length < 10) throw new Error("Telefone inválido. Informe DDD + número.");
-    const telefone = digits.startsWith("55") ? `+${digits}` : `+55${digits}`;
-    const telefone_digits = digits.startsWith("55") ? digits : `55${digits}`;
+    const telefone_digits = normalizarTelefoneDigitsBR(input.telefone || "");
+    if (telefone_digits.length < 12) {
+      throw new Error("Telefone inválido. Informe DDD + número (Brasil).");
+    }
+    const telefone = telefoneE164Br(telefone_digits);
 
     const { data: existente } = await supabase
       .from("whatsapp_conversas")

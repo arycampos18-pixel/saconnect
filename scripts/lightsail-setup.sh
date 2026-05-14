@@ -23,12 +23,35 @@ if [[ ! -f package.json ]]; then
   exit 1
 fi
 
+# Se dist/ ficou com dono www-data (ex.: após deploy), o Vite não consegue esvaziar dist/assets (EACCES).
+if [[ -d "${APP_DIR}/dist" ]]; then
+  sudo chown -R "${USER}:${USER}" "${APP_DIR}/dist"
+fi
+
 npm ci
 npm run build
+
+sudo chown -R www-data:www-data "${APP_DIR}/dist"
 
 # Extrai o ref do projeto Supabase a partir de VITE_SUPABASE_URL no .env
 # Ex.: https://nbgxxdsvoyfxdjvzynit.supabase.co  →  nbgxxdsvoyfxdjvzynit
 SUPABASE_REF="$(grep -E '^VITE_SUPABASE_URL=' .env | sed 's|.*https://||;s|\.supabase\.co.*||')"
+
+# Host público para Nginx (Site URL / certificado). Preferir VITE_PUBLIC_APP_URL no .env.
+PUBLIC_APP_RAW="$(grep -E '^VITE_PUBLIC_APP_URL=' .env 2>/dev/null | sed 's/^VITE_PUBLIC_APP_URL=//;s/^["'\'']//;s/["'\'']$//;s/^[[:space:]]*//;s/[[:space:]]*$//' || true)"
+if [[ -n "$PUBLIC_APP_RAW" ]]; then
+  SERVER_NAME="${PUBLIC_APP_RAW#https://}"
+  SERVER_NAME="${SERVER_NAME#http://}"
+  SERVER_NAME="${SERVER_NAME%%/*}"
+  SERVER_NAME="${SERVER_NAME%%:*}"
+else
+  SERVER_NAME="_"
+fi
+
+# Certbot / navegadores: incluir www.<apex> quando o URL público é o apex (evita falha em -d www...).
+if [[ "$SERVER_NAME" != "_" && "$SERVER_NAME" != www.* ]]; then
+  SERVER_NAME="${SERVER_NAME} www.${SERVER_NAME}"
+fi
 
 if [[ -z "$SUPABASE_REF" ]]; then
   echo "AVISO: VITE_SUPABASE_URL não encontrada no .env — bloco proxy do OTP não será gerado."
@@ -54,7 +77,7 @@ server {
     listen [::]:80 default_server;
     root ${APP_DIR}/dist;
     index index.html;
-    server_name _;
+    server_name ${SERVER_NAME};
 
     # index.html: nunca em cache — o browser sempre busca a versão mais recente.
     # Isso garante que após um novo deploy o buildGuard detecte a mudança de epoch.
@@ -92,3 +115,5 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
 echo "Nginx configurado. Pasta estática: ${APP_DIR}/dist"
+echo "server_name: ${SERVER_NAME} (a partir de VITE_PUBLIC_APP_URL no .env; se vazio, usa _)."
+echo "HTTPS: após o DNS apontar para esta máquina, rode certbot (ex.: sudo certbot --nginx -d saconnect.net.br)."

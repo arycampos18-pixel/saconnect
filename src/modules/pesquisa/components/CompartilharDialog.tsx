@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import type { Pesquisa } from "../services/pesquisaService";
 import { encurtarUrl } from "@/shared/utils/urlShortener";
 import { supabase } from "@/integrations/supabase/client";
+import { publicAppOrigin } from "@/shared/utils/publicAppOrigin";
 
 function formatPhone(v: string) {
   const d = v.replace(/\D/g, "").slice(0, 11);
@@ -108,8 +109,9 @@ export function CompartilharDialog({
   if (!pesquisa) return null;
 
   const code = (pesquisa as any).short_code ?? pesquisa.slug;
-  const urlValidado = code ? `${window.location.origin}/p/${code}` : null;
-  const urlSimples = code ? `${window.location.origin}/p/${code}?s=1` : null;
+  const base = publicAppOrigin();
+  const urlValidado = code ? `${base}/p/${code}` : null;
+  const urlSimples = code ? `${base}/p/${code}?s=1` : null;
   const urlAtual = modo === "validado" ? urlValidado : urlSimples;
 
   // ── Envio via Z-API ─────────────────────────────────────────────────────────
