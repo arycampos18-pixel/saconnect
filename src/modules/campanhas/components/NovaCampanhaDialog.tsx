@@ -11,6 +11,7 @@ import { campanhasService, type PreviewSegmento } from "../services/campanhasSer
 import { segmentacaoService, type Segmento, type SegmentoFiltros } from "@/modules/segmentacao/services/segmentacaoService";
 import { departamentosService } from "@/modules/departamentos-gabinete/services/departamentosService";
 import type { DepartamentoGab } from "@/modules/departamentos-gabinete/data/mock";
+import { useCompany } from "@/modules/settings/contexts/CompanyContext";
 import { Users, Phone, Mail, ShieldCheck, Send, Search, Check, ChevronsUpDown, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -95,6 +96,7 @@ interface Props {
 }
 
 export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
+  const { loading: companyLoading, currentCompany } = useCompany();
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [loadingSeg, setLoadingSeg] = useState(false);
   const [segmentoId, setSegmentoId] = useState("");
@@ -115,16 +117,22 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setLoadingSeg(true);
+    if (!open || companyLoading || !currentCompany) return;
+    setLoadingSeg(true);
       Promise.all([
         segmentacaoService.listar(),
         segmentacaoService.opcoesDisponiveis(),
-        departamentosService.listarDepartamentos().catch(() => [] as DepartamentoGab[]),
+        departamentosService.listarDepartamentos().catch((e: Error) => {
+          console.error("[NovaCampanhaDialog] departamentos:", e);
+          toast.error("Não foi possível carregar departamentos.", {
+            description: e?.message ?? String(e),
+          });
+          return [] as DepartamentoGab[];
+        }),
       ])
         .then(([segs, ops, deps]) => {
           setSegmentos(segs);
-          setDepartamentos((deps ?? []).filter((d) => d.status === "Ativo"));
+          setDepartamentos((deps ?? []).filter((d) => d.status !== "Inativo"));
           setOpcoes({
             bairros: ops.bairros, cidades: ops.cidades, origens: ops.origens,
             tags: ops.tags,
@@ -132,10 +140,9 @@ export function NovaCampanhaDialog({ open, onOpenChange, onSent }: Props) {
         })
         .catch((e) => toast.error("Erro ao carregar dados", { description: e.message }))
         .finally(() => setLoadingSeg(false));
-      setNome(""); setConteudo(""); setSegmentoId(""); setPreview(null);
-      setApenasLgpd(true); setCanal("WhatsApp"); setFiltros({}); setModo("segmento");
-    }
-  }, [open]);
+    setNome(""); setConteudo(""); setSegmentoId(""); setPreview(null);
+    setApenasLgpd(true); setCanal("WhatsApp"); setFiltros({}); setModo("segmento");
+  }, [open, companyLoading, currentCompany?.id]);
 
   useEffect(() => {
     if (modo === "segmento") {

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/auth/hooks/useAuth";
+import { depStore } from "@/modules/departamentos-gabinete/store";
 import { settingsService, type SettingsCompany } from "../services/settingsService";
 
 interface CompanyContextValue {
@@ -61,6 +62,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     if (!user) {
+      depStore.reset();
       setCompanies([]);
       setCurrentCompany(null);
       setPermissions([]);
@@ -102,10 +104,13 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
         setPermissionsReady(true);
         localStorage.removeItem(savedKey);
         await syncActiveCompanyServer(null);
+        depStore.reset();
       } else {
         const company = chosen.settings_companies as SettingsCompany;
         // 1) sincroniza empresa ativa no servidor ANTES de qualquer query
         await syncActiveCompanyServer(company.id);
+        // 1b) departamentos/membros usam RLS por empresa — recarrega após set_active_company
+        await depStore.recarregar();
         // 2) aplica no estado local
         setCurrentCompany(company);
         localStorage.setItem(savedKey, company.id);
@@ -135,6 +140,7 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
       // Atualiza a empresa ativa no servidor PRIMEIRO — a partir daqui o
       // RLS RESTRICTIVE só aceita rows da nova empresa.
       await syncActiveCompanyServer(companyId);
+      await depStore.recarregar();
       setCurrentCompany(link.settings_companies as SettingsCompany);
       localStorage.setItem(storageKey(user.id), companyId);
       await loadPermissions(link.profile_id ?? null);

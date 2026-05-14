@@ -25,28 +25,26 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 const set = (patch: Partial<State>) => { state = { ...state, ...patch }; emit(); };
 
-let loadPromise: Promise<void> | null = null;
+/** Incrementado a cada novo carregar ou reset — evita aplicar resultado após empresa ativa mudar no servidor (RLS). */
+let carregarId = 0;
 
 async function carregar() {
-  if (loadPromise) return loadPromise;
+  const id = ++carregarId;
   set({ loading: true });
-  loadPromise = (async () => {
-    try {
-      const [departamentos, membros, interacoes] = await Promise.all([
-        departamentosService.listarDepartamentos(),
-        departamentosService.listarMembros(),
-        departamentosService.listarInteracoes(),
-      ]);
-      set({ departamentos, membros, interacoes, loaded: true, loading: false });
-    } catch (e: any) {
-      console.error("[depStore] carregar falhou", e);
-      toast.error("Erro ao carregar departamentos: " + (e?.message ?? ""));
-      set({ loading: false, loaded: true });
-    } finally {
-      loadPromise = null;
-    }
-  })();
-  return loadPromise;
+  try {
+    const [departamentos, membros, interacoes] = await Promise.all([
+      departamentosService.listarDepartamentos(),
+      departamentosService.listarMembros(),
+      departamentosService.listarInteracoes(),
+    ]);
+    if (id !== carregarId) return;
+    set({ departamentos, membros, interacoes, loaded: true, loading: false });
+  } catch (e: any) {
+    if (id !== carregarId) return;
+    console.error("[depStore] carregar falhou", e);
+    toast.error("Erro ao carregar departamentos: " + (e?.message ?? ""));
+    set({ loading: false, loaded: true });
+  }
 }
 
 export const depStore = {
@@ -57,6 +55,11 @@ export const depStore = {
     return () => listeners.delete(cb);
   },
   recarregar: () => carregar(),
+  /** Limpa cache e invalida requisições em voo (logout / sem empresa). */
+  reset: () => {
+    carregarId++;
+    set({ loaded: false, loading: false, departamentos: [], membros: [], interacoes: [] });
+  },
   totalMembros(depId: string) {
     return state.membros.filter((m) => m.departamentoId === depId).length;
   },
